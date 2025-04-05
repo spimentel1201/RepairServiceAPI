@@ -17,6 +17,7 @@ const users_module_1 = require("./users/users.module");
 const auth_module_1 = require("./auth/auth.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 const throttler_module_1 = require("./throttler/throttler.module");
+const repair_orders_module_1 = require("./repair-orders/repair-orders.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -30,6 +31,7 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             auth_module_1.AuthModule,
             throttler_module_1.AppThrottlerModule,
+            repair_orders_module_1.RepairOrdersModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

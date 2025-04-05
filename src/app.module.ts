@@ -8,7 +8,11 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppThrottlerModule } from './throttler/throttler.module';
+import { RepairOrdersModule } from './repair-orders/repair-orders.module';
 
+/**
+ * AppModule - Módulo principal de la aplicación
+ */
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -18,6 +22,7 @@ import { AppThrottlerModule } from './throttler/throttler.module';
     UsersModule,
     AuthModule,
     AppThrottlerModule,
+    RepairOrdersModule,
   ],
   controllers: [AppController],
   providers: [
