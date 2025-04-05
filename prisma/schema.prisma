@@ -138,14 +138,15 @@ enum QuoteStatus {
 }
 
 model QuoteItem {
-  id        String   @id @default(uuid())
-  quoteId   String
-  quantity  Int
-  price     Float
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  quoteId     String
+  quantity    Int
+  price       Float
+  description String?  // Añadimos este campo para la descripción del ítem
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  quote     Quote    @relation(fields: [quoteId], references: [id])
+  quote       Quote    @relation(fields: [quoteId], references: [id])
 }
 
 model Sale {
