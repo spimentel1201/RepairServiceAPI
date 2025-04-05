@@ -1,81 +1,86 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { RepairOrderStatus } from '@prisma/client';
-import { Expose, Type } from 'class-transformer';
 
 export class RepairOrderItemResponseDto {
-  @Expose()
+  @ApiProperty()
   id: string;
 
-  @Expose()
+  @ApiProperty()
   repairOrderId: string;
 
-  @Expose()
-  productId?: string;
+  @ApiProperty({ nullable: true })
+  productId: string | null;
 
-  @Expose()
+  @ApiProperty()
   deviceType: string;
 
-  @Expose()
+  @ApiProperty()
   brand: string;
 
-  @Expose()
+  @ApiProperty()
   model: string;
 
-  @Expose()
-  serialNumber?: string;
+  @ApiProperty({ nullable: true })
+  serialNumber: string | null;
 
-  @Expose()
+  @ApiProperty()
   problemDescription: string;
 
-  @Expose()
+  @ApiProperty({ type: [String] })
   accessories: string[];
 
-  @Expose()
+  @ApiProperty()
   quantity: number;
 
-  @Expose()
+  @ApiProperty()
   price: number;
 
-  @Expose()
+  @ApiProperty()
   createdAt: Date;
 
-  @Expose()
+  @ApiProperty()
   updatedAt: Date;
 }
 
 export class RepairOrderResponseDto {
-  @Expose()
+  @ApiProperty()
   id: string;
 
-  @Expose()
+  @ApiProperty()
   customerId: string;
 
-  @Expose()
+  @ApiProperty()
   technicianId: string;
 
-  @Expose()
+  @ApiProperty({ enum: RepairOrderStatus })
   status: RepairOrderStatus;
 
-  @Expose()
-  estimatedCompletionDate?: Date;
+  @ApiProperty()
+  description: string;
 
-  @Expose()
-  completionDate?: Date;
+  @ApiProperty({ nullable: true })
+  notes: string | null;
 
-  @Expose()
-  notes?: string;
+  @ApiProperty()
+  initialReviewCost: number;
 
-  @Expose()
-  totalAmount: number;
+  @ApiProperty()
+  totalCost: number;
 
-  @Expose()
-  @Type(() => RepairOrderItemResponseDto)
-  items: RepairOrderItemResponseDto[];
+  @ApiProperty()
+  startDate: Date;
 
-  @Expose()
+  @ApiProperty({ nullable: true })
+  endDate: Date | null;
+
+  @ApiProperty()
   createdAt: Date;
 
-  @Expose()
+  @ApiProperty()
   updatedAt: Date;
+
+  @ApiProperty({ type: [RepairOrderItemResponseDto] })
+  items: RepairOrderItemResponseDto[];
 
   constructor(partial: Partial<RepairOrderResponseDto>) {
     Object.assign(this, partial);
