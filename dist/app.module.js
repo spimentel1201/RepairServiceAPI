@@ -14,10 +14,11 @@ const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const prisma_module_1 = require("./prisma/prisma.module");
 const users_module_1 = require("./users/users.module");
+const repair_orders_module_1 = require("./repair-orders/repair-orders.module");
+const quotes_module_1 = require("./quotes/quotes.module");
 const auth_module_1 = require("./auth/auth.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 const throttler_module_1 = require("./throttler/throttler.module");
-const repair_orders_module_1 = require("./repair-orders/repair-orders.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -29,6 +30,8 @@ exports.AppModule = AppModule = __decorate([
             }),
             prisma_module_1.PrismaModule,
             users_module_1.UsersModule,
+            repair_orders_module_1.RepairOrdersModule,
+            quotes_module_1.QuotesModule,
             auth_module_1.AuthModule,
             throttler_module_1.AppThrottlerModule,
             repair_orders_module_1.RepairOrdersModule,
