@@ -1,0 +1,176 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  profileImage String
+  phone     String
+  role      Role     @default(TECHNICIAN)
+  isActive    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  repairOrders RepairOrder[]
+  quotes       Quote[]
+  sales        Sale[]
+}
+
+enum Role {
+  ADMIN
+  TECHNICIAN
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?  @unique
+  phone     String
+  documentType  String
+  documentNumber String   @unique
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  repairOrders RepairOrder[]
+  quotes       Quote[]
+  sales        Sale[]
+}
+
+model Product {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  cost        Float
+  stock       Int         @default(0)
+  category    String
+  isActive     Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  repairOrderItems RepairOrderItem[]
+  saleItems        SaleItem[]
+}
+
+model RepairOrder {
+  id          String             @id @default(uuid())
+  customerId  String
+  technicianId String
+  status      RepairOrderStatus  @default(RECEIVED)
+  description String
+  notes       String?
+  initialReviewCost Float        @default(0)
+  totalCost   Float              @default(0)
+  startDate   DateTime           @default(now())
+  endDate     DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  customer    Customer           @relation(fields: [customerId], references: [id])
+  technician  User               @relation(fields: [technicianId], references: [id])
+  items       RepairOrderItem[]
+  quotes      Quote[]
+}
+
+enum RepairOrderStatus {
+  RECEIVED
+  DIAGNOSED
+  IN_PROGRESS
+  WAITING_FOR_PARTS
+  COMPLETED
+  DELIVERED
+  CANCELLED
+}
+
+model RepairOrderItem {
+  id            String      @id @default(uuid())
+  repairOrderId String
+  productId     String?     // Opcional, en caso de que se use un repuesto
+  deviceType    String      // Tipo de dispositivo (TV, Laptop, etc.)
+  brand         String      // Marca
+  model         String      // Modelo
+  serialNumber  String?     // Número de serie
+  problemDescription String // Descripción del problema
+  accessories   String[]    // Lista de accesorios como strings
+  quantity      Int
+  price         Float
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  repairOrder   RepairOrder @relation(fields: [repairOrderId], references: [id])
+  product       Product?    @relation(fields: [productId], references: [id])
+}
+
+model Quote {
+  id            String      @id @default(uuid())
+  repairOrderId String
+  customerId    String
+  technicianId  String
+  status        QuoteStatus @default(PENDING)
+  totalAmount   Float
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  repairOrder   RepairOrder @relation(fields: [repairOrderId], references: [id])
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  technician    User        @relation(fields: [technicianId], references: [id])
+  items         QuoteItem[]
+}
+
+enum QuoteStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model QuoteItem {
+  id        String   @id @default(uuid())
+  quoteId   String
+  quantity  Int
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quote     Quote    @relation(fields: [quoteId], references: [id])
+}
+
+model Sale {
+  id         String   @id @default(uuid())
+  customerId String
+  userId     String
+  totalAmount Float
+  paymentMethod String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
+  items      SaleItem[]
+}
+
+model SaleItem {
+  id        String   @id @default(uuid())
+  saleId    String
+  productId String
+  quantity  Int
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+}
