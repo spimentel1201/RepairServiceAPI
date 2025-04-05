@@ -5,18 +5,15 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
-//import { CustomersModule } from './customers/customers.module';
+import { CustomersModule } from './customers/customers.module';
 //import { ProductsModule } from './products/products.module';
 import { RepairOrdersModule } from './repair-orders/repair-orders.module';
-import { QuotesModule } from './quotes/quotes.module'; // Importamos el módulo de presupuestos
+import { QuotesModule } from './quotes/quotes.module';
 //import { SalesModule } from './sales/sales.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppThrottlerModule } from './throttler/throttler.module';
 
-/**
- * AppModule - Módulo principal de la aplicación
- */
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -24,14 +21,13 @@ import { AppThrottlerModule } from './throttler/throttler.module';
     }),
     PrismaModule,
     UsersModule,
-    //CustomersModule,
+    CustomersModule,
     //ProductsModule,
     RepairOrdersModule,
-    QuotesModule, // Añadimos el módulo de presupuestos
+    QuotesModule,
     //SalesModule,
     AuthModule,
     AppThrottlerModule,
-    RepairOrdersModule,
   ],
   controllers: [AppController],
   providers: [
