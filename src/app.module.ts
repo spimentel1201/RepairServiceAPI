@@ -6,7 +6,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { CustomersModule } from './customers/customers.module';
-//import { ProductsModule } from './products/products.module';
+import { ProductsModule } from './products/products.module';
 import { RepairOrdersModule } from './repair-orders/repair-orders.module';
 import { QuotesModule } from './quotes/quotes.module';
 //import { SalesModule } from './sales/sales.module';
@@ -22,7 +22,7 @@ import { AppThrottlerModule } from './throttler/throttler.module';
     PrismaModule,
     UsersModule,
     CustomersModule,
-    //ProductsModule,
+    ProductsModule,
     RepairOrdersModule,
     QuotesModule,
     //SalesModule,

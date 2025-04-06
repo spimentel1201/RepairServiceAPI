@@ -57,7 +57,8 @@ model Product {
   cost        Float
   stock       Int         @default(0)
   category    String
-  isActive     Boolean     @default(true)
+  isActive    Boolean     @default(true)
+  imageUrl    String?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
