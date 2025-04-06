@@ -1,72 +1,70 @@
-import { IsNotEmpty, IsString, IsUUID, IsEnum, IsOptional, IsArray, ValidateNested, IsNumber } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RepairOrderStatus } from '@prisma/client';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateRepairOrderItemDto {
-  @ApiProperty({ description: 'Type of device (TV, Laptop, etc.)' })
+  @ApiProperty({ description: 'Tipo de dispositivo(TV, Laptop, etc.)' })
   @IsString()
   @IsNotEmpty()
   deviceType: string;
 
-  @ApiProperty({ description: 'Brand of the device' })
+  @ApiProperty({ description: 'Marca del dispositivo' })
   @IsString()
   @IsNotEmpty()
   brand: string;
 
-  @ApiProperty({ description: 'Model of the device' })
+  @ApiProperty({ description: 'Modelo del dispositivo' })
   @IsString()
   @IsNotEmpty()
   model: string;
 
-  @ApiPropertyOptional({ description: 'Serial number of the device' })
+  @ApiPropertyOptional({ description: 'Número de serie del dispositivo' })
   @IsString()
   @IsOptional()
   serialNumber?: string;
 
-  @ApiProperty({ description: 'Description of the problem' })
+  @ApiProperty({ description: 'Descripción del problema' })
   @IsString()
   @IsNotEmpty()
   problemDescription: string;
 
-  @ApiPropertyOptional({ description: 'List of accessories', type: [String] })
+  @ApiPropertyOptional({ description: 'Accesorios incluidos', type: [String] })
   @IsArray()
-  @IsString({ each: true })
   @IsOptional()
   accessories?: string[];
 
-  @ApiProperty({ description: 'Quantity of items', minimum: 1 })
+  @ApiProperty({ description: 'Cantidad', minimum: 1, default: 1 })
   @IsNumber()
-  @IsNotEmpty()
-  quantity: number;
+  @IsPositive()
+  @IsOptional()
+  quantity?: number;
 
-  @ApiPropertyOptional({ description: 'Price per item' })
+  @ApiPropertyOptional({ description: 'Precio unitario', minimum: 0 })
   @IsNumber()
+  @IsPositive()
   @IsOptional()
   price?: number;
 
-  @ApiPropertyOptional({ description: 'Product ID if a specific product is used' })
-  @IsString()
+  @ApiPropertyOptional({ description: 'ID del producto relacionado (si aplica)' })
   @IsUUID()
   @IsOptional()
   productId?: string;
 }
 
 export class CreateRepairOrderDto {
-  @ApiProperty({ description: 'Customer ID' })
-  @IsString()
+  @ApiProperty({ description: 'ID del cliente' })
   @IsUUID()
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ description: 'Technician ID' })
-  @IsString()
+  @ApiProperty({ description: 'ID del técnico asignado' })
   @IsUUID()
   @IsNotEmpty()
   technicianId: string;
 
   @ApiPropertyOptional({ 
-    description: 'Status of the repair order',
+    description: 'Estado de la orden', 
     enum: RepairOrderStatus,
     default: RepairOrderStatus.RECEIVED
   })
@@ -74,27 +72,25 @@ export class CreateRepairOrderDto {
   @IsOptional()
   status?: RepairOrderStatus;
 
-  @ApiProperty({ description: 'Description of the repair order' })
+  @ApiProperty({ description: 'Descripción general de la orden' })
   @IsString()
   @IsNotEmpty()
   description: string;
 
-  @ApiPropertyOptional({ description: 'Additional notes' })
+  @ApiPropertyOptional({ description: 'Notas adicionales' })
   @IsString()
   @IsOptional()
   notes?: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Initial cost for reviewing the items',
-    default: 0
-  })
+  @ApiPropertyOptional({ description: 'Costo inicial de revisión', minimum: 0 })
   @IsNumber()
+  @IsPositive()
   @IsOptional()
   initialReviewCost?: number;
 
   @ApiProperty({ 
-    description: 'Items to be repaired',
-    type: [CreateRepairOrderItemDto]
+    description: 'Ítems de la orden de reparación', 
+    type: [CreateRepairOrderItemDto] 
   })
   @IsArray()
   @ValidateNested({ each: true })

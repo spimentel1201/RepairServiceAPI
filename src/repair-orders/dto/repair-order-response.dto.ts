@@ -1,85 +1,82 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RepairOrderStatus } from '@prisma/client';
 
 export class RepairOrderItemResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'ID del ítem' })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ID de la orden de reparación' })
   repairOrderId: string;
 
-  @ApiProperty({ nullable: true })
-  productId: string | null;
-
-  @ApiProperty()
+  @ApiProperty({ description: 'Tipo de dispositivo' })
   deviceType: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Marca del dispositivo' })
   brand: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Modelo del dispositivo' })
   model: string;
 
-  @ApiProperty({ nullable: true })
-  serialNumber: string | null;
+  @ApiPropertyOptional({ description: 'Número de serie del dispositivo' })
+  serialNumber?: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Descripción del problema' })
   problemDescription: string;
 
-  @ApiProperty({ type: [String] })
+  @ApiProperty({ description: 'Accesorios incluidos', type: [String] })
   accessories: string[];
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Cantidad' })
   quantity: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Precio unitario' })
   price: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'ID del producto relacionado (si aplica)' })
+  productId?: string;
+
+  @ApiProperty({ description: 'Fecha de creación' })
   createdAt: Date;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Fecha de actualización' })
   updatedAt: Date;
 }
 
 export class RepairOrderResponseDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'ID de la orden' })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ID del cliente' })
   customerId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'ID del técnico asignado' })
   technicianId: string;
 
-  @ApiProperty({ enum: RepairOrderStatus })
+  @ApiProperty({ description: 'Estado de la orden', enum: RepairOrderStatus })
   status: RepairOrderStatus;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Descripción general de la orden' })
   description: string;
 
-  @ApiProperty({ nullable: true })
-  notes: string | null;
+  @ApiPropertyOptional({ description: 'Notas adicionales' })
+  notes?: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Costo inicial de revisión' })
   initialReviewCost: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Costo total de la reparación' })
   totalCost: number;
 
-  @ApiProperty()
-  startDate: Date;
-
-  @ApiProperty({ nullable: true })
-  endDate: Date | null;
-
-  @ApiProperty()
+  @ApiProperty({ description: 'Fecha de creación' })
   createdAt: Date;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Fecha de actualización' })
   updatedAt: Date;
 
-  @ApiProperty({ type: [RepairOrderItemResponseDto] })
+  @ApiPropertyOptional({ description: 'Fecha de finalización' })
+  endDate?: Date;
+
+  @ApiProperty({ description: 'Ítems de la orden', type: [RepairOrderItemResponseDto] })
   items: RepairOrderItemResponseDto[];
 
   constructor(partial: Partial<RepairOrderResponseDto>) {

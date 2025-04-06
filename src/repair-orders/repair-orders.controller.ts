@@ -19,14 +19,14 @@ export class RepairOrdersController {
 
   @Post()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Create a new repair order' })
+  @ApiOperation({ summary: 'Crear una nueva orden de reparación' })
   @ApiResponse({ 
     status: 201, 
-    description: 'The repair order has been successfully created.',
+    description: 'La orden de reparación ha sido creada exitosamente.',
     type: RepairOrderResponseDto
   })
-  @ApiResponse({ status: 400, description: 'Bad request.' })
-  @ApiResponse({ status: 404, description: 'Customer or technician not found.' })
+  @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
+  @ApiResponse({ status: 404, description: 'Cliente o técnico no encontrado.' })
   @ApiBody({ type: CreateRepairOrderDto })
   create(@Body() createRepairOrderDto: CreateRepairOrderDto): Promise<RepairOrderResponseDto> {
     return this.repairOrdersService.create(createRepairOrderDto);
@@ -34,10 +34,10 @@ export class RepairOrdersController {
 
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Get all repair orders' })
+  @ApiOperation({ summary: 'Obtener todas las órdenes de reparación' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Return all repair orders',
+    description: 'Retorna todas las órdenes de reparación',
     type: [RepairOrderResponseDto]
   })
   findAll(): Promise<RepairOrderResponseDto[]> {
@@ -46,58 +46,58 @@ export class RepairOrdersController {
 
   @Get(':id')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Get a repair order by ID' })
-  @ApiParam({ name: 'id', description: 'Repair order ID' })
+  @ApiOperation({ summary: 'Obtener una orden de reparación por ID' })
+  @ApiParam({ name: 'id', description: 'ID de la orden de reparación' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Return the repair order',
+    description: 'Retorna la orden de reparación',
     type: RepairOrderResponseDto
   })
-  @ApiResponse({ status: 404, description: 'Repair order not found.' })
+  @ApiResponse({ status: 404, description: 'Orden de reparación no encontrada.' })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<RepairOrderResponseDto> {
     return this.repairOrdersService.findOne(id);
   }
 
   @Get('customer/:customerId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Get all repair orders for a customer' })
-  @ApiParam({ name: 'customerId', description: 'Customer ID' })
+  @ApiOperation({ summary: 'Obtener todas las órdenes de reparación de un cliente' })
+  @ApiParam({ name: 'customerId', description: 'ID del cliente' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Return all repair orders for the customer',
+    description: 'Retorna todas las órdenes de reparación del cliente',
     type: [RepairOrderResponseDto]
   })
-  @ApiResponse({ status: 404, description: 'Customer not found.' })
+  @ApiResponse({ status: 404, description: 'Cliente no encontrado.' })
   findByCustomer(@Param('customerId', ParseUUIDPipe) customerId: string): Promise<RepairOrderResponseDto[]> {
     return this.repairOrdersService.findByCustomer(customerId);
   }
 
   @Get('technician/:technicianId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Get all repair orders for a technician' })
-  @ApiParam({ name: 'technicianId', description: 'Technician ID' })
+  @ApiOperation({ summary: 'Obtener todas las órdenes de reparación de un técnico' })
+  @ApiParam({ name: 'technicianId', description: 'ID del técnico' })
   @ApiResponse({ 
     status: 200, 
-    description: 'Return all repair orders for the technician',
+    description: 'Retorna todas las órdenes de reparación del técnico',
     type: [RepairOrderResponseDto]
   })
-  @ApiResponse({ status: 404, description: 'Technician not found.' })
+  @ApiResponse({ status: 404, description: 'Técnico no encontrado.' })
   findByTechnician(@Param('technicianId', ParseUUIDPipe) technicianId: string): Promise<RepairOrderResponseDto[]> {
     return this.repairOrdersService.findByTechnician(technicianId);
   }
 
   @Patch(':id')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Update a repair order' })
-  @ApiParam({ name: 'id', description: 'Repair order ID' })
+  @ApiOperation({ summary: 'Actualizar una orden de reparación' })
+  @ApiParam({ name: 'id', description: 'ID de la orden de reparación' })
   @ApiBody({ type: UpdateRepairOrderDto })
   @ApiResponse({ 
     status: 200, 
-    description: 'The repair order has been successfully updated.',
+    description: 'La orden de reparación ha sido actualizada exitosamente.',
     type: RepairOrderResponseDto
   })
-  @ApiResponse({ status: 400, description: 'Bad request.' })
-  @ApiResponse({ status: 404, description: 'Repair order, customer, or technician not found.' })
+  @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
+  @ApiResponse({ status: 404, description: 'Orden de reparación, cliente o técnico no encontrado.' })
   update(
     @Param('id', ParseUUIDPipe) id: string, 
     @Body() updateRepairOrderDto: UpdateRepairOrderDto
@@ -107,30 +107,31 @@ export class RepairOrdersController {
 
   @Delete(':id')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Delete a repair order' })
-  @ApiParam({ name: 'id', description: 'Repair order ID' })
+  @ApiOperation({ summary: 'Eliminar una orden de reparación' })
+  @ApiParam({ name: 'id', description: 'ID de la orden de reparación' })
   @ApiResponse({ 
     status: 200, 
-    description: 'The repair order has been successfully deleted.',
+    description: 'La orden de reparación ha sido eliminada exitosamente.',
     schema: {
       type: 'object',
       properties: {
         message: {
           type: 'string',
-          example: 'Repair order deleted successfully'
+          example: 'Orden de reparación eliminada correctamente'
         }
       }
     }
   })
-  @ApiResponse({ status: 400, description: 'Bad request.' })
-  @ApiResponse({ status: 404, description: 'Repair order not found.' })
+  @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
+  @ApiResponse({ status: 404, description: 'Orden de reparación no encontrada.' })
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
     return this.repairOrdersService.remove(id);
   }
 
   @Patch(':id/status')
-  @ApiOperation({ summary: 'Update the status of a repair order' })
-  @ApiParam({ name: 'id', description: 'Repair order ID' })
+  @Roles(Role.ADMIN, Role.TECHNICIAN)
+  @ApiOperation({ summary: 'Actualizar el estado de una orden de reparación' })
+  @ApiParam({ name: 'id', description: 'ID de la orden de reparación' })
   @ApiBody({ 
     schema: {
       type: 'object',
@@ -145,11 +146,11 @@ export class RepairOrdersController {
   })
   @ApiResponse({ 
     status: 200, 
-    description: 'The repair order status has been successfully updated.',
+    description: 'El estado de la orden de reparación ha sido actualizado exitosamente.',
     type: RepairOrderResponseDto
   })
-  @ApiResponse({ status: 400, description: 'Bad request.' })
-  @ApiResponse({ status: 404, description: 'Repair order not found.' })
+  @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
+  @ApiResponse({ status: 404, description: 'Orden de reparación no encontrada.' })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string, 
     @Body('status') status: RepairOrderStatus
