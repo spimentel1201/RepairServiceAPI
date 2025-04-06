@@ -150,18 +150,28 @@ model QuoteItem {
   quote       Quote    @relation(fields: [quoteId], references: [id])
 }
 
-model Sale {
-  id         String   @id @default(uuid())
-  customerId String
-  userId     String
-  totalAmount Float
-  paymentMethod String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  TRANSFER
+  YAPE
+  PLIN
+}
 
-  customer   Customer  @relation(fields: [customerId], references: [id])
-  user       User      @relation(fields: [userId], references: [id])
-  items      SaleItem[]
+model Sale {
+  id            String        @id @default(uuid())
+  customerId    String?       // Optional for non-registered customers
+  userId        String
+  customerName  String?       // For non-registered customers
+  totalAmount   Float
+  paymentMethod PaymentMethod
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer      Customer?     @relation(fields: [customerId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+  items         SaleItem[]
 }
 
 model SaleItem {
