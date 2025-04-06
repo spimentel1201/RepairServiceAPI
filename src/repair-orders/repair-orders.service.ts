@@ -24,7 +24,7 @@ export class RepairOrdersService {
     });
 
     if (!customer) {
-      throw new NotFoundException(`Customer with ID ${createRepairOrderDto.customerId} not found`);
+      throw new NotFoundException(`Cliente con ID ${createRepairOrderDto.customerId} no encontrado`);
     }
 
     // Verificar si el técnico existe
@@ -33,7 +33,7 @@ export class RepairOrdersService {
     });
 
     if (!technician) {
-      throw new NotFoundException(`Technician with ID ${createRepairOrderDto.technicianId} not found`);
+      throw new NotFoundException(`Técnico con ID ${createRepairOrderDto.technicianId} no encontrado`);
     }
 
     // Calcular el monto total de la orden
@@ -81,7 +81,7 @@ export class RepairOrdersService {
 
       return new RepairOrderResponseDto(repairOrder);
     } catch (error) {
-      throw new BadRequestException(`Failed to create repair order: ${error.message}`);
+      throw new BadRequestException(`Error al crear la orden de reparación: ${error.message}`);
     }
   }
 
@@ -113,7 +113,7 @@ export class RepairOrdersService {
     });
 
     if (!repairOrder) {
-      throw new NotFoundException(`Repair order with ID ${id} not found`);
+      throw new NotFoundException(`Orden de reparación con ID ${id} no encontrada`);
     }
 
     return new RepairOrderResponseDto(repairOrder);
@@ -130,7 +130,7 @@ export class RepairOrdersService {
     });
 
     if (!customer) {
-      throw new NotFoundException(`Customer with ID ${customerId} not found`);
+      throw new NotFoundException(`Cliente con ID ${customerId} no encontrado`);
     }
 
     const repairOrders = await this.prisma.repairOrder.findMany({
@@ -154,7 +154,7 @@ export class RepairOrdersService {
     });
 
     if (!technician) {
-      throw new NotFoundException(`Technician with ID ${technicianId} not found`);
+      throw new NotFoundException(`Técnico con ID ${technicianId} no encontrado`);
     }
 
     const repairOrders = await this.prisma.repairOrder.findMany({
@@ -184,7 +184,7 @@ export class RepairOrdersService {
       });
 
       if (!customer) {
-        throw new NotFoundException(`Customer with ID ${updateRepairOrderDto.customerId} not found`);
+        throw new NotFoundException(`Cliente con ID ${updateRepairOrderDto.customerId} no encontrado`);
       }
     }
 
@@ -195,7 +195,7 @@ export class RepairOrdersService {
       });
 
       if (!technician) {
-        throw new NotFoundException(`Technician with ID ${updateRepairOrderDto.technicianId} not found`);
+        throw new NotFoundException(`Técnico con ID ${updateRepairOrderDto.technicianId} no encontrado`);
       }
     }
 
@@ -222,7 +222,7 @@ export class RepairOrdersService {
               customerId: updateRepairOrderDto.customerId,
               technicianId: updateRepairOrderDto.technicianId,
               status: updateRepairOrderDto.status,
-              description: updateRepairOrderDto.description, // Add this field
+              description: updateRepairOrderDto.description,
               notes: updateRepairOrderDto.notes,
               totalCost: totalAmount,
               // Si el estado cambia a COMPLETED, establecer la fecha de finalización
@@ -274,7 +274,7 @@ export class RepairOrdersService {
 
       return new RepairOrderResponseDto(updatedOrder);
     } catch (error) {
-      throw new BadRequestException(`Failed to update repair order: ${error.message}`);
+      throw new BadRequestException(`Error al actualizar la orden de reparación: ${error.message}`);
     }
   }
 
@@ -301,9 +301,9 @@ export class RepairOrdersService {
         });
       });
 
-      return { message: 'Repair order deleted successfully' };
+      return { message: 'Orden de reparación eliminada correctamente' };
     } catch (error) {
-      throw new BadRequestException(`Failed to delete repair order: ${error.message}`);
+      throw new BadRequestException(`Error al eliminar la orden de reparación: ${error.message}`);
     }
   }
 
@@ -332,7 +332,7 @@ export class RepairOrdersService {
 
       return new RepairOrderResponseDto(updatedOrder);
     } catch (error) {
-      throw new BadRequestException(`Failed to update repair order status: ${error.message}`);
+      throw new BadRequestException(`Error al actualizar el estado de la orden de reparación: ${error.message}`);
     }
   }
 }
