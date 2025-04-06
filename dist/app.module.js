@@ -18,6 +18,7 @@ const customers_module_1 = require("./customers/customers.module");
 const products_module_1 = require("./products/products.module");
 const repair_orders_module_1 = require("./repair-orders/repair-orders.module");
 const quotes_module_1 = require("./quotes/quotes.module");
+const sales_module_1 = require("./sales/sales.module");
 const auth_module_1 = require("./auth/auth.module");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 const throttler_module_1 = require("./throttler/throttler.module");
@@ -36,6 +37,7 @@ exports.AppModule = AppModule = __decorate([
             products_module_1.ProductsModule,
             repair_orders_module_1.RepairOrdersModule,
             quotes_module_1.QuotesModule,
+            sales_module_1.SalesModule,
             auth_module_1.AuthModule,
             throttler_module_1.AppThrottlerModule,
         ],

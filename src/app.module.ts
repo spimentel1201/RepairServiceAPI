@@ -9,7 +9,7 @@ import { CustomersModule } from './customers/customers.module';
 import { ProductsModule } from './products/products.module';
 import { RepairOrdersModule } from './repair-orders/repair-orders.module';
 import { QuotesModule } from './quotes/quotes.module';
-//import { SalesModule } from './sales/sales.module';
+import { SalesModule } from './sales/sales.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { AppThrottlerModule } from './throttler/throttler.module';
@@ -25,7 +25,7 @@ import { AppThrottlerModule } from './throttler/throttler.module';
     ProductsModule,
     RepairOrdersModule,
     QuotesModule,
-    //SalesModule,
+    SalesModule,
     AuthModule,
     AppThrottlerModule,
   ],
