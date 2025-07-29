@@ -71,7 +71,7 @@ export class AuthService {
     // Crea un nuevo usuario con rol TECHNICIAN por defecto
     const user = await this.usersService.create({
       ...registerDto,
-      role: Role.TECHNICIAN,
+      role: Role.ADMIN,
       profileImage: '',
       isActive: true,
     });

@@ -14,7 +14,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Restaura esta importación
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
@@ -34,7 +34,7 @@ import { UserResponseDto } from './dto/user-response.dto';
  * permitiendo acceso solo a usuarios autenticados con los roles adecuados.
  */
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard) // Restaura ambos guardias
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

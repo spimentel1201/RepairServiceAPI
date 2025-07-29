@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateIf, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RepairOrderStatus } from '@prisma/client';
 
@@ -53,15 +53,14 @@ export class CreateRepairOrderItemDto {
 }
 
 export class CreateRepairOrderDto {
-  @ApiProperty({ description: 'ID del cliente' })
+  @ApiProperty({ description: 'ID del cliente', required: false })
+  @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
-  customerId: string;
+  customerId?: string | null;
 
-  @ApiProperty({ description: 'ID del técnico asignado' })
-  @IsUUID()
-  @IsNotEmpty()
-  technicianId: string;
+  @ApiProperty({ description: 'ID del técnico asignado',  required: false, nullable: true })
+  @IsOptional()
+  technicianId?: string | null;
 
   @ApiPropertyOptional({ 
     description: 'Estado de la orden', 

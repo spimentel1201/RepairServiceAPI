@@ -69,7 +69,7 @@ model Product {
 model RepairOrder {
   id          String             @id @default(uuid())
   customerId  String
-  technicianId String
+  technicianId String?
   status      RepairOrderStatus  @default(RECEIVED)
   description String
   notes       String?
@@ -81,7 +81,7 @@ model RepairOrder {
   updatedAt   DateTime           @updatedAt
 
   customer    Customer           @relation(fields: [customerId], references: [id])
-  technician  User               @relation(fields: [technicianId], references: [id])
+  technician  User?               @relation(fields: [technicianId], references: [id])
   items       RepairOrderItem[]
   quotes      Quote[]
 }

@@ -5,6 +5,8 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { CustomerHistoryDto } from './dto/customer-history.dto';
 import { Prisma } from '@prisma/client';
+import { RepairOrderItemResponseDto, RepairOrderResponseDto } from 'src/repair-orders/dto/repair-order-response.dto';
+import { QuoteItemResponseDto, QuoteResponseDto } from 'src/quotes/dto/quote-response.dto';
 
 @Injectable()
 export class CustomersService {
@@ -97,6 +99,7 @@ export class CustomersService {
         repairOrders: {
           include: {
             items: true,
+            technician: true,
           },
         },
         quotes: {
@@ -111,11 +114,30 @@ export class CustomersService {
       throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
     }
 
+    // Transformar repairOrders a RepairOrderResponseDto
+    const repairOrders = customer.repairOrders.map(order => 
+      new RepairOrderResponseDto({
+        ...order,
+        customerName: customer.name,
+        technicianName: order.technician?.firstName + ' ' + order.technician?.lastName || '', // Asumiendo que technician tiene una propiedad name
+        technicianId: order.technician?.id || '', // Asumiendo que technician tiene una propiedad id
+        items: order.items.map(item => new RepairOrderItemResponseDto(item))
+      })
+    );
+
+    // Transformar quotes a QuoteResponseDto si es necesario
+    const quotes = customer.quotes.map(quote => 
+      new QuoteResponseDto({
+        ...quote,
+        items: quote.items.map(item => new QuoteItemResponseDto(item))
+      })
+    );
+
     return new CustomerHistoryDto({
       customerId: customer.id,
       customerName: customer.name,
-      repairOrders: customer.repairOrders,
-      quotes: customer.quotes,
+      repairOrders,
+      quotes,
     });
   }
 

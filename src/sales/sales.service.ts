@@ -5,6 +5,7 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 import { SaleResponseDto, SaleItemResponseDto } from './dto/sale-response.dto';
 import { SaleInvoiceDto, SaleInvoiceItemDto } from './dto/sale-invoice.dto';
 import { Prisma } from '@prisma/client';
+import { roundToTwoDecimals, safeRound } from 'src/common/utils/price.utils';
 
 @Injectable()
 export class SalesService {
@@ -258,8 +259,8 @@ export class SalesService {
     }
     
     // Calcular subtotal y impuestos (18% IGV)
-    const subtotal = sale.totalAmount / 1.18;
-    const tax = sale.totalAmount - subtotal;
+    const subtotal = roundToTwoDecimals(sale.totalAmount / 1.18);
+    const tax = roundToTwoDecimals(sale.totalAmount - subtotal);
     
     // Generar número de factura (formato: INV-YYYYMMDD-ID)
     const date = new Date(sale.createdAt);
@@ -273,8 +274,8 @@ export class SalesService {
       productName: item.product.name,
       productDescription: item.product.description,
       quantity: item.quantity,
-      unitPrice: item.price,
-      totalPrice: item.price * item.quantity,
+      unitPrice: roundToTwoDecimals(item.price),
+      totalPrice: roundToTwoDecimals(item.price * item.quantity),
     }));
     
     // Crear la factura
@@ -285,9 +286,9 @@ export class SalesService {
       customerDocument: sale.customer?.documentNumber,
       sellerName: `${sale.user.firstName} ${sale.user.lastName}`,
       paymentMethod: sale.paymentMethod,
-      subtotal,
-      tax,
-      totalAmount: sale.totalAmount,
+      subtotal: roundToTwoDecimals(subtotal),
+      tax: roundToTwoDecimals(tax),
+      totalAmount: roundToTwoDecimals(sale.totalAmount),
       items: invoiceItems,
     });
   }

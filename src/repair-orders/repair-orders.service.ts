@@ -19,6 +19,25 @@ export class RepairOrdersService {
    */
   async create(createRepairOrderDto: CreateRepairOrderDto): Promise<RepairOrderResponseDto> {
     // Verificar si el cliente existe
+    /*
+    if (!createRepairOrderDto.customerId){
+      try{
+        const customer = await this.prisma.customer.create({
+          data: {
+            name: createRepairOrderDto.customerName,
+            email: createRepairOrderDto.customerEmail,
+            phone: createRepairOrderDto.customerPhone,
+            documentNumber: createRepairOrderDto.customerDocument,
+            documentType: createRepairOrderDto.customerDocumentType,
+            address: createRepairOrderDto.customerAddress,
+          },
+        });
+        createRepairOrderDto.customerId = customer.id;
+      }catch(error){
+        throw new BadRequestException(`Error al crear el cliente: ${error.message}`);
+      }
+    }
+    */
     const customer = await this.prisma.customer.findUnique({
       where: { id: createRepairOrderDto.customerId },
     });
@@ -26,16 +45,17 @@ export class RepairOrdersService {
     if (!customer) {
       throw new NotFoundException(`Cliente con ID ${createRepairOrderDto.customerId} no encontrado`);
     }
-
+    /*
     // Verificar si el técnico existe
     const technician = await this.prisma.user.findUnique({
       where: { id: createRepairOrderDto.technicianId },
     });
 
+    
     if (!technician) {
       throw new NotFoundException(`Técnico con ID ${createRepairOrderDto.technicianId} no encontrado`);
     }
-
+    */
     // Calcular el monto total de la orden
     const totalAmount = createRepairOrderDto.items.reduce(
       (sum, item) => sum + (item.price || 0) * item.quantity,
@@ -43,42 +63,36 @@ export class RepairOrdersService {
     );
 
     try {
-      // Crear la orden con sus items en una transacción
-      const repairOrder = await this.prisma.$transaction(async (prisma) => {
-        // Crear la orden
-        const order = await prisma.repairOrder.create({
-          data: {
-            customerId: createRepairOrderDto.customerId,
-            technicianId: createRepairOrderDto.technicianId,
-            status: createRepairOrderDto.status || RepairOrderStatus.RECEIVED,
-            description: createRepairOrderDto.description || '', // Añadir el campo description que es requerido
-            notes: createRepairOrderDto.notes,
-            // Usar el costo inicial de revisión del DTO o 0 por defecto
-            initialReviewCost: createRepairOrderDto.initialReviewCost || 0,
-            // Calcular el costo total sumando el costo inicial de revisión y el de los items
-            totalCost: (createRepairOrderDto.initialReviewCost || 0) + totalAmount,
-            items: {
-              create: createRepairOrderDto.items.map(item => ({
-                deviceType: item.deviceType,
-                brand: item.brand,
-                model: item.model,
-                serialNumber: item.serialNumber,
-                problemDescription: item.problemDescription,
-                accessories: item.accessories || [],
-                quantity: item.quantity,
-                price: item.price || 0,
-                productId: item.productId,
-              })),
-            },
-          },
-          include: {
-            items: true,
-          },
-        });
-
-        return order;
-      });
-
+  const repairOrder = await this.prisma.$transaction(async (prisma) => {
+    const order = await prisma.repairOrder.create({
+      data: {
+        customerId: createRepairOrderDto.customerId || null,
+        technicianId: createRepairOrderDto.technicianId || null,
+        status: createRepairOrderDto.status || RepairOrderStatus.RECEIVED,
+        description: createRepairOrderDto.description,
+        notes: createRepairOrderDto.notes,
+        initialReviewCost: createRepairOrderDto.initialReviewCost || 0,
+        totalCost: (createRepairOrderDto.initialReviewCost || 0) + totalAmount,
+        items: {
+          create: createRepairOrderDto.items.map(item => ({
+            deviceType: item.deviceType,
+            brand: item.brand,
+            model: item.model,
+            serialNumber: item.serialNumber,
+            problemDescription: item.problemDescription,
+            accessories: item.accessories || [],
+            quantity: item.quantity,
+            price: item.price || 0,
+            productId: item.productId,
+          })),
+        },
+      },
+      include: {
+        items: true,
+      },
+    });
+      return order;
+    });
       return new RepairOrderResponseDto(repairOrder);
     } catch (error) {
       throw new BadRequestException(`Error al crear la orden de reparación: ${error.message}`);
@@ -93,9 +107,23 @@ export class RepairOrdersService {
     const repairOrders = await this.prisma.repairOrder.findMany({
       include: {
         items: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          }
+        },
+        technician: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true
+          }
+        },
       },
     });
-
     return repairOrders.map(order => new RepairOrderResponseDto(order));
   }
 
@@ -109,6 +137,21 @@ export class RepairOrdersService {
       where: { id },
       include: {
         items: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          }
+        },
+        technician: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true
+          }
+        },
       },
     });
 

@@ -3,7 +3,7 @@ import { RepairOrdersService } from './repair-orders.service';
 import { CreateRepairOrderDto } from './dto/create-repair-order.dto';
 import { UpdateRepairOrderDto } from './dto/update-repair-order.dto';
 import { RepairOrderResponseDto } from './dto/repair-order-response.dto';
-import { RepairOrderStatus } from '@prisma/client';
+import { RepairOrder, RepairOrderStatus } from '@prisma/client';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';

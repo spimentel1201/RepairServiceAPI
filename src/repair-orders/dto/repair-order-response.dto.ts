@@ -40,6 +40,10 @@ export class RepairOrderItemResponseDto {
 
   @ApiProperty({ description: 'Fecha de actualización' })
   updatedAt: Date;
+
+  constructor(partial: Partial<RepairOrderItemResponseDto>) {
+    Object.assign(this, partial);
+  }
 }
 
 export class RepairOrderResponseDto {
@@ -49,8 +53,14 @@ export class RepairOrderResponseDto {
   @ApiProperty({ description: 'ID del cliente' })
   customerId: string;
 
+  @ApiProperty({ description: 'Nombre del cliente' })
+  customerName: string;
+
   @ApiProperty({ description: 'ID del técnico asignado' })
   technicianId: string;
+
+  @ApiProperty({ description: 'Nombre del técnico asignado' })
+  technicianName: string;
 
   @ApiProperty({ description: 'Estado de la orden', enum: RepairOrderStatus })
   status: RepairOrderStatus;

@@ -22,6 +22,10 @@ export class QuoteItemResponseDto {
 
   @ApiProperty()
   updatedAt: Date;
+
+  constructor(partial: Partial<QuoteItemResponseDto>) {
+    Object.assign(this, partial);
+  }
 }
 
 export class QuoteResponseDto {
