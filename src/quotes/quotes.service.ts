@@ -83,6 +83,13 @@ export class QuotesService {
     const quotes = await this.prisma.quote.findMany({
       include: {
         items: true,
+        repairOrder: {
+          include: {
+            items: true,
+          },
+        },
+        customer: true,
+        technician: true,
       },
     });
 
@@ -99,6 +106,13 @@ export class QuotesService {
       where: { id },
       include: {
         items: true,
+        repairOrder: {
+          include: {
+            items: true,
+          },
+        },
+        customer: true,
+        technician: true,
       },
     });
 
