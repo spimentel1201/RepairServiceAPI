@@ -1,13 +1,17 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseGuards, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { ImportProductsDto, ImportFileType } from './dto/import-products.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
+import * as Multer from 'multer';
 
 @ApiTags('products')
 @ApiBearerAuth()
@@ -165,4 +169,75 @@ export class ProductsController {
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
     return this.productsService.remove(id);
   }
+  
+    @Post('import')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Importar productos desde un archivo Excel o CSV' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Archivo Excel (.xlsx) o CSV (.csv)'
+        },
+        fileType: {
+          type: 'string',
+          enum: Object.values(ImportFileType),
+          description: 'Tipo de archivo (excel o csv)'
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Los productos han sido importados exitosamente.',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        importedCount: { type: 'number' },
+        errors: { 
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              row: { type: 'number' },
+              error: { type: 'string' }
+            }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Formato de archivo incorrecto o datos inválidos.' })
+  @UseInterceptors(FileInterceptor('file'))
+  async importProducts(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('fileType') fileType: ImportFileType
+  ) {
+    return this.productsService.importProducts(file, fileType);
+  }
+
+  @Get('import/template')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Descargar plantilla para importación de productos' })
+  @ApiQuery({ 
+    name: 'fileType', 
+    enum: ImportFileType, 
+    description: 'Tipo de archivo de la plantilla (excel o csv)' 
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Plantilla generada exitosamente',
+  })
+  downloadTemplate(
+    @Query('fileType') fileType: ImportFileType,
+    @Res() res: Response
+  ) {
+    return this.productsService.generateTemplate(fileType, res);
+  }
 }
+
