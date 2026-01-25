@@ -17,5 +17,10 @@
       "PRISMA_GENERATE": "npx prisma generate",
       "PRISMA_MIGRATE": "npx prisma migrate deploy"
     }
+  },
+  "functions": {
+    "dist/main.js": {
+      "includeFiles": "node_modules/swagger-ui-dist/**"
+    }
   }
 }
