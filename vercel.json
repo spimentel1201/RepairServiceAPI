@@ -1,23 +1,11 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "dist/main.js",
-      "use": "@vercel/node"
+      "source": "/(.*)",
+      "destination": "/dist/main.js"
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "dist/main.js"
-    }
-  ],
-  "build": {
-    "env": {
-      "PRISMA_GENERATE": "npx prisma generate",
-      "PRISMA_MIGRATE": "npx prisma migrate deploy"
-    }
-  },
   "functions": {
     "dist/main.js": {
       "includeFiles": "node_modules/swagger-ui-dist/**"
