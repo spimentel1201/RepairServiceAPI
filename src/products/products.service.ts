@@ -5,7 +5,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
 import { Prisma } from '@prisma/client';
 import * as xlsx from 'xlsx';
-import * as csvParser from 'csv-parser';
+import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import { ImportFileType } from './dto/import-products.dto';
 // Importar correctamente los tipos de Multer
