@@ -17,10 +17,5 @@
       "PRISMA_GENERATE": "npx prisma generate",
       "PRISMA_MIGRATE": "npx prisma migrate deploy"
     }
-  },
-  "includeFiles": [
-    "prisma/schema.prisma",
-    "node_modules/.prisma/client/schema.prisma",
-    "node_modules/@prisma/client/**"
-  ]
+  }
 }
