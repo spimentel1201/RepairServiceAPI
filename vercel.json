@@ -3,11 +3,11 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/dist/main.js"
+      "destination": "/api/index.js"
     }
   ],
   "functions": {
-    "dist/main.js": {
+    "api/index.js": {
       "includeFiles": "node_modules/swagger-ui-dist/**"
     }
   }
