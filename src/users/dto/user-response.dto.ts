@@ -42,7 +42,10 @@ export class UserResponseDto {
   @Expose()
   updatedAt: Date;
 
-  constructor(partial: Partial<UserResponseDto>) {
+  constructor(partial: Partial<UserResponseDto> & { password?: string }) {
     Object.assign(this, partial);
+    // Doble capa de seguridad: aunque el interceptor no corra, el hash de la
+    // contraseña nunca se copia a la respuesta.
+    delete this.password;
   }
 }

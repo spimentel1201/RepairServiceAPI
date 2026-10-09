@@ -6,17 +6,17 @@ import {
   Patch, 
   Param, 
   Delete, 
-  UseGuards,
   HttpCode,
   HttpStatus,
-  Query
+  Query,
+  ForbiddenException
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Restaura esta importación
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 import { UserResponseDto } from './dto/user-response.dto';
 
@@ -30,11 +30,11 @@ import { UserResponseDto } from './dto/user-response.dto';
  * - Desactivación de usuarios
  * - Cambio de contraseña
  * 
- * Todas las rutas están protegidas por JwtAuthGuard y RolesGuard,
- * permitiendo acceso solo a usuarios autenticados con los roles adecuados.
+ * Todas las rutas están protegidas por defecto por los guards globales
+ * (JwtAuthGuard + RolesGuard registrados en AppModule); @Roles define el
+ * permiso requerido en cada endpoint.
  */
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard) // Restaura ambos guardias
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -103,18 +103,31 @@ export class UsersController {
   /**
    * Cambia la contraseña de un usuario
    * @param id - ID del usuario
-   * @param currentPassword - Contraseña actual
-   * @param newPassword - Nueva contraseña
+   * @param changePasswordDto - Contraseña actual (si aplica) y nueva contraseña
+   * @param currentUser - Usuario autenticado que realiza la petición
    * @returns Mensaje de confirmación
-   * @access Usuario autenticado (propio perfil) o administrador
+   * @access El propio usuario (debe enviar su contraseña actual)
+   *         o un administrador (puede resetear sin conocerla)
    */
   @Post(':id/change-password')
   @HttpCode(HttpStatus.OK)
   changePassword(
     @Param('id') id: string,
-    @Body('currentPassword') currentPassword: string,
-    @Body('newPassword') newPassword: string,
+    @Body() changePasswordDto: ChangePasswordDto,
+    @CurrentUser() currentUser: { id: string; role: Role },
   ): Promise<{ message: string }> {
-    return this.usersService.changePassword(id, currentPassword, newPassword);
+    const isSelf = currentUser?.id === id;
+    const isAdmin = currentUser?.role === Role.ADMIN;
+
+    if (!isSelf && !isAdmin) {
+      throw new ForbiddenException(
+        'No tienes permiso para cambiar la contraseña de este usuario',
+      );
+    }
+
+    return this.usersService.changePassword(id, changePasswordDto, {
+      // Solo el dueño del cuenta debe demostrar la contraseña actual.
+      requireCurrentPassword: isSelf,
+    });
   }
 }

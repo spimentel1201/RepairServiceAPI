@@ -2,6 +2,7 @@ import { Injectable, ConflictException, NotFoundException, BadRequestException }
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -157,13 +158,19 @@ export class UsersService {
   /**
    * Cambia la contraseña de un usuario
    * @param id - ID del usuario
-   * @param currentPassword - Contraseña actual
-   * @param newPassword - Nueva contraseña
+   * @param changePasswordDto - Contraseña actual (si aplica) y nueva contraseña
+   * @param options.requireCurrentPassword - Si es true exige validar la
+   *        contraseña actual (cambio propio); si es false permite el reset
+   *        hecho por un administrador
    * @returns Mensaje de confirmación
    * @throws NotFoundException si el usuario no existe
-   * @throws BadRequestException si la contraseña actual es incorrecta
+   * @throws BadRequestException si falta/errónea la contraseña actual o la nueva no cumple requisitos
    */
-  async changePassword(id: string, currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  async changePassword(
+    id: string,
+    changePasswordDto: ChangePasswordDto,
+    options: { requireCurrentPassword?: boolean } = {},
+  ): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
@@ -172,12 +179,21 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordValid) {
-      throw new BadRequestException('Current password is incorrect');
+    if (options.requireCurrentPassword !== false) {
+      if (!changePasswordDto.currentPassword) {
+        throw new BadRequestException('Current password is required');
+      }
+
+      const isPasswordValid = await bcrypt.compare(
+        changePasswordDto.currentPassword,
+        user.password,
+      );
+      if (!isPasswordValid) {
+        throw new BadRequestException('Current password is incorrect');
+      }
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 10);
     await this.prisma.user.update({
       where: { id },
       data: { password: hashedPassword },
