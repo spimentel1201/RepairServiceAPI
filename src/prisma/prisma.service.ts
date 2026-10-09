@@ -5,7 +5,12 @@ import { PrismaClient } from '@prisma/client';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
     super({
-      log: ['query', 'info', 'warn', 'error'],
+      // En produccion solo se registran avisos y errores: volcar TODAS las
+      // queries en cada request expone datos sensibles y degrada el rendimiento
+      log:
+        process.env.NODE_ENV === 'production'
+          ? ['warn', 'error']
+          : ['query', 'info', 'warn', 'error'],
     });
   }
 

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 /**
  * Swagger se habilita/deshabilita con ENABLE_SWAGGER=true|false.
@@ -46,6 +47,12 @@ export function configureApp(app: INestApplication): void {
       transform: true,
     }),
   );
+
+  // Los errores de Prisma se traducen a 409/404/500 en lugar de un 400 generico
+  app.useGlobalFilters(new PrismaExceptionFilter());
+
+  // Cierra Prisma y el resto de los hooks al recibir SIGTERM/SIGINT
+  app.enableShutdownHooks();
 
   app.enableCors({
     origin: getCorsOrigin(),
