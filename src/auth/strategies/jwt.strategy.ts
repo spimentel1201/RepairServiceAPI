@@ -26,12 +26,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return null;
     }
 
-    return { 
-      id: payload.sub, 
-      email: payload.email,
-      role: payload.role,
+    // El rol SIEMPRE se lee de la base de datos, nunca del token:
+    // así un ADMIN degradado a TECHNICIAN pierde permisos de inmediato,
+    // sin esperar a que venza el JWT.
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
       firstName: user.firstName,
-      lastName: user.lastName
+      lastName: user.lastName,
     };
   }
 }
