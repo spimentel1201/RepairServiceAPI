@@ -7,6 +7,7 @@ import { CustomerHistoryDto } from './dto/customer-history.dto';
 import { Prisma } from '@prisma/client';
 import { RepairOrderItemResponseDto, RepairOrderResponseDto } from 'src/repair-orders/dto/repair-order-response.dto';
 import { QuoteItemResponseDto, QuoteResponseDto } from 'src/quotes/dto/quote-response.dto';
+import { Paged } from '../common/pagination/pagination.utils';
 
 @Injectable()
 export class CustomersService {
@@ -37,17 +38,28 @@ export class CustomersService {
           }
         }
       }
-      throw new BadRequestException(`Error al crear el cliente: ${error.message}`);
+      // Re-lanza el error original: los errores de Prisma los mapea el filtro
+      // global (P2002 -> 409, P2025/P2003 -> 404/409) y los demas -> 500 real
+      throw error;
     }
   }
 
   /**
-   * Obtiene todos los clientes
-   * @returns Lista de clientes
+   * Obtiene una página de clientes
+   * @param params Paginación
+   * @returns Página de clientes y total de registros
    */
-  async findAll(): Promise<CustomerResponseDto[]> {
-    const customers = await this.prisma.customer.findMany();
-    return customers.map(customer => new CustomerResponseDto(customer));
+  async findAll(params: { skip?: number; take?: number } = {}): Promise<Paged<CustomerResponseDto>> {
+    const [customers, total] = await Promise.all([
+      this.prisma.customer.findMany({
+        skip: params.skip,
+        take: params.take,
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.customer.count(),
+    ]);
+
+    return { data: customers.map(customer => new CustomerResponseDto(customer)), total };
   }
 
   /**
@@ -171,7 +183,8 @@ export class CustomersService {
           }
         }
       }
-      throw new BadRequestException(`Error al actualizar el cliente: ${error.message}`);
+      // Re-lanza el error original (ver comentario en create)
+      throw error;
     }
   }
 
@@ -215,10 +228,8 @@ export class CustomersService {
 
       return { message: 'Cliente eliminado correctamente' };
     } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException(`Error al eliminar el cliente: ${error.message}`);
+      // Re-lanza el error original (ver comentario en create)
+      throw error;
     }
   }
 

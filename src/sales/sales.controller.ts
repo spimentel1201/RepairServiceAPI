@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, Req, Res } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
@@ -7,7 +7,8 @@ import { SaleInvoiceDto } from './dto/sale-invoice.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { Request } from 'express';
+import { Request, Response } from 'express';
+import { parsePagination } from '../common/pagination/pagination.utils';
 
 @ApiTags('sales')
 @ApiBearerAuth()
@@ -37,20 +38,35 @@ export class SalesController {
   @ApiQuery({ name: 'startDate', description: 'Fecha de inicio (YYYY-MM-DD)', required: false })
   @ApiQuery({ name: 'endDate', description: 'Fecha de fin (YYYY-MM-DD)', required: false })
   @ApiQuery({ name: 'customerId', description: 'ID del cliente', required: false })
+  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
+  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'Retorna todas las ventas',
+    description: 'Retorna una página de ventas. El total de registros sin paginar se expone en la cabecera X-Total-Count',
     type: [SaleResponseDto]
   })
-  findAll(
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('customerId') customerId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<SaleResponseDto[]> {
     const startDateTime = startDate ? new Date(startDate) : undefined;
     const endDateTime = endDate ? new Date(endDate) : undefined;
-    
-    return this.salesService.findAll(startDateTime, endDateTime, customerId);
+    const { skip, take } = parsePagination(page, limit);
+
+    const { data, total } = await this.salesService.findAll({
+      startDate: startDateTime,
+      endDate: endDateTime,
+      customerId,
+      skip,
+      take,
+    });
+
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get(':id')

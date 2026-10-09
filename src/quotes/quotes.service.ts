@@ -1,13 +1,26 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateQuoteDto } from './dto/create-quote.dto';
+import { CreateQuoteDto, CreateQuoteItemDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 import { QuoteStatus } from '@prisma/client';
+import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
+import { Paged } from '../common/pagination/pagination.utils';
 
 @Injectable()
 export class QuotesService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * El total de un presupuesto siempre lo calcula el servidor a partir de sus
+   * ítems: `Σ (precio * cantidad)` redondeado a 2 decimales. El campo
+   * `totalAmount` que envie el cliente se ignora.
+   */
+  private calculateTotal(items: CreateQuoteItemDto[]): number {
+    return roundToTwoDecimals(
+      items.reduce((sum, item) => sum + toAmount(item.price) * item.quantity, 0),
+    );
+  }
 
   /**
    * Crea un nuevo presupuesto
@@ -15,6 +28,11 @@ export class QuotesService {
    * @returns El presupuesto creado
    */
   async create(createQuoteDto: CreateQuoteDto): Promise<QuoteResponseDto> {
+    // Verificar que al menos hay un ítem
+    if (!createQuoteDto.items || createQuoteDto.items.length === 0) {
+      throw new BadRequestException('El presupuesto debe tener al menos un ítem');
+    }
+
     // Verificar si la orden de reparación existe
     const repairOrder = await this.prisma.repairOrder.findUnique({
       where: { id: createQuoteDto.repairOrderId },
@@ -42,58 +60,61 @@ export class QuotesService {
       throw new NotFoundException(`Técnico con ID ${createQuoteDto.technicianId} no encontrado`);
     }
 
-    try {
-      // Crear el presupuesto con sus ítems en una transacción
-      const quote = await this.prisma.$transaction(async (prisma) => {
-        // Crear el presupuesto
-        const newQuote = await prisma.quote.create({
-          data: {
-            repairOrderId: createQuoteDto.repairOrderId,
-            customerId: createQuoteDto.customerId,
-            technicianId: createQuoteDto.technicianId,
-            status: createQuoteDto.status || QuoteStatus.PENDING,
-            totalAmount: createQuoteDto.totalAmount,
-            items: {
-              create: createQuoteDto.items.map(item => ({
-                quantity: item.quantity,
-                price: item.price,
-                description: item.description,
-              })),
-            },
+    // Crear el presupuesto con sus ítems en una transacción
+    const quote = await this.prisma.$transaction(async (prisma) => {
+      // Crear el presupuesto (total recalculado por el servidor)
+      const newQuote = await prisma.quote.create({
+        data: {
+          repairOrderId: createQuoteDto.repairOrderId,
+          customerId: createQuoteDto.customerId,
+          technicianId: createQuoteDto.technicianId,
+          status: createQuoteDto.status || QuoteStatus.PENDING,
+          totalAmount: this.calculateTotal(createQuoteDto.items),
+          items: {
+            create: createQuoteDto.items.map(item => ({
+              quantity: item.quantity,
+              price: toAmount(item.price),
+              description: item.description,
+            })),
           },
-          include: {
-            items: true,
-          },
-        });
-
-        return newQuote;
+        },
+        include: {
+          items: true,
+        },
       });
 
-      return new QuoteResponseDto(quote);
-    } catch (error) {
-      throw new BadRequestException(`Error al crear el presupuesto: ${error.message}`);
-    }
+      return newQuote;
+    });
+
+    return new QuoteResponseDto(quote);
   }
 
   /**
-   * Obtiene todos los presupuestos
-   * @returns Lista de presupuestos
+   * Obtiene una página de presupuestos
+   * @param params Paginación
+   * @returns Página de presupuestos y total de registros
    */
-  async findAll(): Promise<QuoteResponseDto[]> {
-    const quotes = await this.prisma.quote.findMany({
-      include: {
-        items: true,
-        repairOrder: {
-          include: {
-            items: true,
+  async findAll(params: { skip?: number; take?: number } = {}): Promise<Paged<QuoteResponseDto>> {
+    const [quotes, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+          repairOrder: {
+            include: {
+              items: true,
+            },
           },
+          customer: true,
+          technician: true,
         },
-        customer: true,
-        technician: true,
-      },
-    });
+      }),
+      this.prisma.quote.count(),
+    ]);
 
-    return quotes.map(quote => new QuoteResponseDto(quote));
+    return { data: quotes.map(quote => new QuoteResponseDto(quote)), total };
   }
 
   /**
@@ -214,63 +235,55 @@ export class QuotesService {
       }
     }
 
-    try {
-      // Actualizar el presupuesto en una transacción
-      const updatedQuote = await this.prisma.$transaction(async (prisma) => {
-        // Si hay ítems nuevos, eliminar los existentes y crear los nuevos
-        if (updateQuoteDto.items && updateQuoteDto.items.length > 0) {
-          // Eliminar ítems existentes
-          await prisma.quoteItem.deleteMany({
-            where: { quoteId: id },
-          });
+    // Actualizar el presupuesto en una transacción
+    const updatedQuote = await this.prisma.$transaction(async (prisma) => {
+      // Si hay ítems nuevos, eliminar los existentes y crear los nuevos
+      if (updateQuoteDto.items && updateQuoteDto.items.length > 0) {
+        // Eliminar ítems existentes
+        await prisma.quoteItem.deleteMany({
+          where: { quoteId: id },
+        });
 
-          // Actualizar el presupuesto con los nuevos ítems
-          const quote = await prisma.quote.update({
-            where: { id },
-            data: {
-              repairOrderId: updateQuoteDto.repairOrderId,
-              customerId: updateQuoteDto.customerId,
-              technicianId: updateQuoteDto.technicianId,
-              status: updateQuoteDto.status,
-              totalAmount: updateQuoteDto.totalAmount,
-              items: {
-                create: updateQuoteDto.items.map(item => ({
-                  quantity: item.quantity,
-                  price: item.price,
-                  description: item.description,
-                })),
-              },
+        // Actualizar el presupuesto con los nuevos ítems (total recalculado)
+        return prisma.quote.update({
+          where: { id },
+          data: {
+            repairOrderId: updateQuoteDto.repairOrderId,
+            customerId: updateQuoteDto.customerId,
+            technicianId: updateQuoteDto.technicianId,
+            status: updateQuoteDto.status,
+            totalAmount: this.calculateTotal(updateQuoteDto.items),
+            items: {
+              create: updateQuoteDto.items.map(item => ({
+                quantity: item.quantity,
+                price: toAmount(item.price),
+                description: item.description,
+              })),
             },
-            include: {
-              items: true,
-            },
-          });
+          },
+          include: {
+            items: true,
+          },
+        });
+      }
 
-          return quote;
-        } else {
-          // Si no hay ítems nuevos, solo actualizar los datos básicos
-          const quote = await prisma.quote.update({
-            where: { id },
-            data: {
-              repairOrderId: updateQuoteDto.repairOrderId,
-              customerId: updateQuoteDto.customerId,
-              technicianId: updateQuoteDto.technicianId,
-              status: updateQuoteDto.status,
-              totalAmount: updateQuoteDto.totalAmount,
-            },
-            include: {
-              items: true,
-            },
-          });
-
-          return quote;
-        }
+      // Si no hay ítems nuevos, solo actualizar los datos básicos
+      // (totalAmount no se toca: sigue siendo el calculado por el servidor)
+      return prisma.quote.update({
+        where: { id },
+        data: {
+          repairOrderId: updateQuoteDto.repairOrderId,
+          customerId: updateQuoteDto.customerId,
+          technicianId: updateQuoteDto.technicianId,
+          status: updateQuoteDto.status,
+        },
+        include: {
+          items: true,
+        },
       });
+    });
 
-      return new QuoteResponseDto(updatedQuote);
-    } catch (error) {
-      throw new BadRequestException(`Error al actualizar el presupuesto: ${error.message}`);
-    }
+    return new QuoteResponseDto(updatedQuote);
   }
 
   /**
@@ -283,19 +296,15 @@ export class QuotesService {
     // Verificar si el presupuesto existe
     await this.findOne(id);
 
-    try {
-      const updatedQuote = await this.prisma.quote.update({
-        where: { id },
-        data: { status },
-        include: {
-          items: true,
-        },
-      });
+    const updatedQuote = await this.prisma.quote.update({
+      where: { id },
+      data: { status },
+      include: {
+        items: true,
+      },
+    });
 
-      return new QuoteResponseDto(updatedQuote);
-    } catch (error) {
-      throw new BadRequestException(`Error al actualizar el estado del presupuesto: ${error.message}`);
-    }
+    return new QuoteResponseDto(updatedQuote);
   }
 
   /**
@@ -307,22 +316,18 @@ export class QuotesService {
     // Verificar si el presupuesto existe
     await this.findOne(id);
 
-    try {
-      await this.prisma.$transaction(async (prisma) => {
-        // Eliminar los ítems del presupuesto
-        await prisma.quoteItem.deleteMany({
-          where: { quoteId: id },
-        });
-
-        // Eliminar el presupuesto
-        await prisma.quote.delete({
-          where: { id },
-        });
+    await this.prisma.$transaction(async (prisma) => {
+      // Eliminar los ítems del presupuesto
+      await prisma.quoteItem.deleteMany({
+        where: { quoteId: id },
       });
 
-      return { message: 'Presupuesto eliminado correctamente' };
-    } catch (error) {
-      throw new BadRequestException(`Error al eliminar el presupuesto: ${error.message}`);
-    }
+      // Eliminar el presupuesto
+      await prisma.quote.delete({
+        where: { id },
+      });
+    });
+
+    return { message: 'Presupuesto eliminado correctamente' };
   }
 }

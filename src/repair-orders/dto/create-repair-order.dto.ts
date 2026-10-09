@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateIf, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min, ValidateIf, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RepairOrderStatus } from '@prisma/client';
 
@@ -34,29 +34,34 @@ export class CreateRepairOrderItemDto {
   @IsOptional()
   accessories?: string[];
 
-  @ApiProperty({ description: 'Cantidad', minimum: 1, default: 1 })
+  @ApiPropertyOptional({ description: 'Cantidad (por defecto 1)', minimum: 1, default: 1 })
   @IsNumber()
   @IsPositive()
   @IsOptional()
   quantity?: number;
 
-  @ApiPropertyOptional({ description: 'Precio unitario', minimum: 0 })
+  @ApiPropertyOptional({
+    description:
+      'Precio unitario. Si se omite y el ítem tiene productId, se usa el precio del catálogo; en caso contrario 0',
+    minimum: 0,
+  })
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   @IsOptional()
   price?: number;
 
   @ApiPropertyOptional({ description: 'ID del producto relacionado (si aplica)' })
   @IsUUID()
   @IsOptional()
-  productId?: string;
-}
+  productId?: string;}
 
 export class CreateRepairOrderDto {
-  @ApiProperty({ description: 'ID del cliente', required: false })
-  @IsOptional()
+  @ApiProperty({
+    description: 'ID del cliente (obligatorio: la orden siempre pertenece a un cliente)',
+  })
   @IsUUID()
-  customerId?: string | null;
+  @IsNotEmpty()
+  customerId: string;
 
   @ApiProperty({ description: 'ID del técnico asignado',  required: false, nullable: true })
   @IsOptional()
@@ -81,9 +86,9 @@ export class CreateRepairOrderDto {
   @IsOptional()
   notes?: string;
 
-  @ApiPropertyOptional({ description: 'Costo inicial de revisión', minimum: 0 })
+  @ApiPropertyOptional({ description: 'Costo inicial de revisión (puede ser 0)', minimum: 0 })
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   @IsOptional()
   initialReviewCost?: number;
 

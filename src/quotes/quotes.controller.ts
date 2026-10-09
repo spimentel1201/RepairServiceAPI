@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, Res, NotFoundException } from '@nestjs/common';
 import { QuotesService } from './quotes.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 import { QuoteStatus } from '@prisma/client';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { Response } from 'express';
+import { parsePagination } from '../common/pagination/pagination.utils';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
@@ -32,13 +34,22 @@ export class QuotesController {
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todos los presupuestos' })
+  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
+  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'Retorna todos los presupuestos',
+    description: 'Retorna una página de presupuestos. El total de registros sin paginar se expone en la cabecera X-Total-Count',
     type: [QuoteResponseDto]
   })
-  findAll(): Promise<QuoteResponseDto[]> {
-    return this.quotesService.findAll();
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ): Promise<QuoteResponseDto[]> {
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.quotesService.findAll({ skip, take });
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get(':id')

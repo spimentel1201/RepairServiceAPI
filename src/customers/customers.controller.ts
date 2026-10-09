@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, Res } from '@nestjs/common';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { CustomerHistoryDto } from './dto/customer-history.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { Response } from 'express';
+import { parsePagination } from '../common/pagination/pagination.utils';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
@@ -32,13 +34,22 @@ export class CustomersController {
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todos los clientes' })
+  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
+  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'Retorna todos los clientes',
+    description: 'Retorna una página de clientes. El total de registros sin paginar se expone en la cabecera X-Total-Count',
     type: [CustomerResponseDto]
   })
-  findAll(): Promise<CustomerResponseDto[]> {
-    return this.customersService.findAll();
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ): Promise<CustomerResponseDto[]> {
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.customersService.findAll({ skip, take });
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get('search')

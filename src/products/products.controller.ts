@@ -9,6 +9,7 @@ import { Role } from '@prisma/client';
 import { ImportProductsDto, ImportFileType } from './dto/import-products.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
+import { parsePagination } from '../common/pagination/pagination.utils';
 import * as Multer from 'multer';
 
 /**
@@ -67,17 +68,43 @@ export class ProductsController {
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todos los productos' })
   @ApiQuery({ name: 'category', description: 'Filtrar por categoría', required: false })
-  @ApiQuery({ name: 'active', description: 'Filtrar por estado activo/inactivo', required: false, type: Boolean })
+  @ApiQuery({ name: 'active', description: 'Filtrar por estado activo/inactivo (true|false)', required: false, type: Boolean })
+  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
+  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'Retorna todos los productos',
+    description: 'Retorna una página de productos. El total de registros sin paginar se expone en la cabecera X-Total-Count',
     type: [ProductResponseDto]
   })
-  findAll(
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
     @Query('category') category?: string,
-    @Query('active') active?: boolean,
+    @Query('active') active?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<ProductResponseDto[]> {
-    return this.productsService.findAll(category, active);
+    // El valor llega como texto desde el query string
+    let activeFilter: boolean | undefined;
+    if (active !== undefined && active !== '') {
+      if (active === 'true' || active === '1') {
+        activeFilter = true;
+      } else if (active === 'false' || active === '0') {
+        activeFilter = false;
+      } else {
+        throw new BadRequestException(`Valor inválido para "active": ${active}`);
+      }
+    }
+
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.productsService.findAll({
+      category,
+      active: activeFilter,
+      skip,
+      take,
+    });
+
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get('search')

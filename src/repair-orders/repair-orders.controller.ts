@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, Res, BadRequestException } from '@nestjs/common';
 import { RepairOrdersService } from './repair-orders.service';
 import { CreateRepairOrderDto } from './dto/create-repair-order.dto';
 import { UpdateRepairOrderDto } from './dto/update-repair-order.dto';
 import { RepairOrderResponseDto } from './dto/repair-order-response.dto';
 import { RepairOrder, RepairOrderStatus } from '@prisma/client';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { Response } from 'express';
+import { parsePagination } from '../common/pagination/pagination.utils';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 
@@ -32,13 +34,29 @@ export class RepairOrdersController {
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todas las órdenes de reparación' })
+  @ApiQuery({ name: 'status', description: 'Filtrar por estado de la orden', required: false, enum: RepairOrderStatus })
+  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
+  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
   @ApiResponse({ 
     status: 200, 
-    description: 'Retorna todas las órdenes de reparación',
+    description: 'Retorna una página de órdenes de reparación. El total de registros sin paginar se expone en la cabecera X-Total-Count',
     type: [RepairOrderResponseDto]
   })
-  findAll(): Promise<RepairOrderResponseDto[]> {
-    return this.repairOrdersService.findAll();
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
+    @Query('status') status?: RepairOrderStatus,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ): Promise<RepairOrderResponseDto[]> {
+    // El query param llega como texto: se valida contra el enum antes de tocar la BD
+    if (status && !Object.values(RepairOrderStatus).includes(status)) {
+      throw new BadRequestException(`Estado inválido: ${status}`);
+    }
+
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.repairOrdersService.findAll({ status, skip, take });
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get(':id')

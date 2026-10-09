@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { ArrayNotEmpty, IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '@prisma/client';
 
@@ -11,13 +11,19 @@ export class CreateSaleItemDto {
 
   @ApiProperty({ description: 'Cantidad del producto', minimum: 1 })
   @IsNumber()
+  @IsInt()
   @IsPositive()
   quantity: number;
 
-  @ApiProperty({ description: 'Precio unitario del producto', minimum: 0 })
+  @ApiPropertyOptional({
+    description:
+      'Ignorado: el precio siempre se toma del catálogo (Product.price). Se acepta por compatibilidad con clientes antiguos',
+    minimum: 0,
+  })
   @IsNumber()
-  @IsPositive()
-  price: number;
+  @Min(0)
+  @IsOptional()
+  price?: number;
 }
 
 export class CreateSaleDto {
@@ -38,6 +44,7 @@ export class CreateSaleDto {
 
   @ApiProperty({ description: 'Ítems de la venta', type: [CreateSaleItemDto] })
   @IsArray()
+  @ArrayNotEmpty({ message: 'La venta debe tener al menos un ítem' })
   @ValidateNested({ each: true })
   @Type(() => CreateSaleItemDto)
   items: CreateSaleItemDto[];

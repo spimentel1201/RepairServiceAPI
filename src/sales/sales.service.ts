@@ -5,7 +5,16 @@ import { UpdateSaleDto } from './dto/update-sale.dto';
 import { SaleResponseDto, SaleItemResponseDto } from './dto/sale-response.dto';
 import { SaleInvoiceDto, SaleInvoiceItemDto } from './dto/sale-invoice.dto';
 import { Prisma } from '@prisma/client';
-import { roundToTwoDecimals, safeRound } from 'src/common/utils/price.utils';
+import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
+import { Paged } from '../common/pagination/pagination.utils';
+
+export interface FindAllSalesParams {
+  startDate?: Date;
+  endDate?: Date;
+  customerId?: string;
+  skip?: number;
+  take?: number;
+}
 
 @Injectable()
 export class SalesService {
@@ -13,174 +22,172 @@ export class SalesService {
 
   /**
    * Crea una nueva venta
+   *
+   * El precio de cada ítem sale SIEMPRE del catálogo (`Product.price`); el valor
+   * que envíe el cliente en `items[].price` se ignora. El total lo calcula el
+   * servidor. La reserva de stock ocurre dentro de la transacción con un update
+   * condicional, de modo que dos ventas simultáneas no pueden dejarlo negativo.
+   *
    * @param createSaleDto Datos para crear la venta
    * @param userId ID del usuario que realiza la venta
    * @returns La venta creada
    */
   async create(createSaleDto: CreateSaleDto, userId: string): Promise<SaleResponseDto> {
-    try {
-      // Verificar que al menos hay un ítem en la venta
-      if (!createSaleDto.items || createSaleDto.items.length === 0) {
-        throw new BadRequestException('La venta debe tener al menos un ítem');
-      }
+    // Verificar que al menos hay un ítem en la venta
+    if (!createSaleDto.items || createSaleDto.items.length === 0) {
+      throw new BadRequestException('La venta debe tener al menos un ítem');
+    }
 
-      // Verificar que el cliente existe si se proporciona un ID
-      if (createSaleDto.customerId) {
-        const customer = await this.prisma.customer.findUnique({
-          where: { id: createSaleDto.customerId },
-        });
-
-        if (!customer) {
-          throw new NotFoundException(`Cliente con ID ${createSaleDto.customerId} no encontrado`);
-        }
-      } else if (!createSaleDto.customerName) {
-        // Si no hay customerId ni customerName, establecer un valor por defecto
-        createSaleDto.customerName = 'Cliente no registrado';
-      }
-
-      // Verificar que los productos existen y tienen suficiente stock
-      const productIds = createSaleDto.items.map(item => item.productId);
-      const products = await this.prisma.product.findMany({
-        where: {
-          id: { in: productIds },
-        },
+    // Verificar que el cliente existe si se proporciona un ID
+    if (createSaleDto.customerId) {
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: createSaleDto.customerId },
       });
 
-      if (products.length !== productIds.length) {
-        throw new BadRequestException('Uno o más productos no existen');
+      if (!customer) {
+        throw new NotFoundException(`Cliente con ID ${createSaleDto.customerId} no encontrado`);
+      }
+    } else if (!createSaleDto.customerName) {
+      // Si no hay customerId ni customerName, establecer un valor por defecto
+      createSaleDto.customerName = 'Cliente no registrado';
+    }
+
+    // Verificar que los productos existen (precios de catalogo)
+    const productIds = [...new Set(createSaleDto.items.map(item => item.productId))];
+    const products = await this.prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+      },
+    });
+
+    if (products.length !== productIds.length) {
+      throw new BadRequestException('Uno o más productos no existen');
+    }
+
+    const productMap = new Map(products.map(product => [product.id, product]));
+
+    // Total calculado por el servidor: precio de catalogo * cantidad
+    let totalAmount = 0;
+    for (const item of createSaleDto.items) {
+      const product = productMap.get(item.productId);
+
+      if (product.stock < item.quantity) {
+        throw new BadRequestException(
+          `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
+        );
       }
 
-      // Verificar stock y calcular el total
-      let totalAmount = 0;
-      const productMap = new Map(products.map(product => [product.id, product]));
-      
+      totalAmount += toAmount(product.price) * item.quantity;
+    }
+    totalAmount = roundToTwoDecimals(totalAmount);
+
+    const sale = await this.prisma.$transaction(async (prisma) => {
+      // Reserva de stock atomica: el `where` condicional se re-evalua con la
+      // version mas reciente de la fila, por lo que si otra venta ya consumio
+      // el stock disponible el count es 0 y la venta no se concreta.
       for (const item of createSaleDto.items) {
         const product = productMap.get(item.productId);
-        
-        if (product.stock < item.quantity) {
+
+        const reserved = await prisma.product.updateMany({
+          where: { id: item.productId, stock: { gte: item.quantity } },
+          data: { stock: { decrement: item.quantity } },
+        });
+
+        if (reserved.count === 0) {
           throw new BadRequestException(
             `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
           );
         }
-        
-        // Usar el precio del producto si no se proporciona uno específico
-        if (!item.price) {
-          item.price = product.price;
-        }
-        
-        totalAmount += item.price * item.quantity;
       }
 
-      // Crear la venta y sus ítems en una transacción
-      const sale = await this.prisma.$transaction(async (prisma) => {
-        // Crear la venta
-        const newSale = await prisma.sale.create({
-          data: {
-            customerId: createSaleDto.customerId,
-            customerName: createSaleDto.customerName,
-            userId,
-            totalAmount,
-            paymentMethod: createSaleDto.paymentMethod,
-            items: {
-              create: createSaleDto.items.map(item => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-              })),
-            },
+      // Crear la venta con los precios del catalogo
+      return prisma.sale.create({
+        data: {
+          customerId: createSaleDto.customerId,
+          customerName: createSaleDto.customerName,
+          userId,
+          totalAmount,
+          paymentMethod: createSaleDto.paymentMethod,
+          items: {
+            create: createSaleDto.items.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              price: toAmount(productMap.get(item.productId).price),
+            })),
           },
-          include: {
-            items: true,
-            user: true,
-            customer: true,
-          },
-        });
-
-        // Actualizar el stock de los productos
-        for (const item of createSaleDto.items) {
-          await prisma.product.update({
-            where: { id: item.productId },
-            data: {
-              stock: {
-                decrement: item.quantity,
-              },
-            },
-          });
-        }
-
-        return newSale;
+        },
+        include: {
+          items: true,
+          user: true,
+          customer: true,
+        },
       });
+    });
 
-      // Preparar la respuesta
-      const saleItems = await Promise.all(
-        sale.items.map(async (item) => {
-          const product = productMap.get(item.productId);
-          
-          return new SaleItemResponseDto({
-            ...item,
-            productName: product.name,
-            productDescription: product.description,
-          });
-        })
-      );
-
-      return new SaleResponseDto({
-        ...sale,
-        items: saleItems,
-        userName: `${sale.user.firstName} ${sale.user.lastName}`,
-        customerFullName: sale.customer ? sale.customer.name : sale.customerName,
+    // Preparar la respuesta
+    const saleItems = sale.items.map(item => {
+      const product = productMap.get(item.productId);
+      return new SaleItemResponseDto({
+        ...item,
+        productName: product.name,
+        productDescription: product.description,
       });
-    } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException(`Error al crear la venta: ${error.message}`);
-    }
+    });
+
+    return new SaleResponseDto({
+      ...sale,
+      items: saleItems,
+      userName: `${sale.user.firstName} ${sale.user.lastName}`,
+      customerFullName: sale.customer ? sale.customer.name : sale.customerName,
+    });
   }
 
   /**
-   * Obtiene todas las ventas
-   * @param startDate Fecha de inicio para filtrar
-   * @param endDate Fecha de fin para filtrar
-   * @param customerId ID del cliente para filtrar
-   * @returns Lista de ventas
+   * Obtiene una página de ventas
+   * @param params Filtros opcionales (rango de fechas, cliente) y paginación
+   * @returns Página de ventas y total de registros que cumplen el filtro
    */
-  async findAll(startDate?: Date, endDate?: Date, customerId?: string): Promise<SaleResponseDto[]> {
+  async findAll(params: FindAllSalesParams = {}): Promise<Paged<SaleResponseDto>> {
     const where: Prisma.SaleWhereInput = {};
-    
-    if (startDate || endDate) {
+
+    if (params.startDate || params.endDate) {
       where.createdAt = {};
-      
-      if (startDate) {
-        where.createdAt.gte = startDate;
+
+      if (params.startDate) {
+        where.createdAt.gte = params.startDate;
       }
-      
-      if (endDate) {
-        where.createdAt.lte = endDate;
+
+      if (params.endDate) {
+        where.createdAt.lte = params.endDate;
       }
-    }
-    
-    if (customerId) {
-      where.customerId = customerId;
     }
 
-    const sales = await this.prisma.sale.findMany({
-      where,
-      include: {
-        items: {
-          include: {
-            product: true,
+    if (params.customerId) {
+      where.customerId = params.customerId;
+    }
+
+    const [sales, total] = await Promise.all([
+      this.prisma.sale.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        include: {
+          items: {
+            include: {
+              product: true,
+            },
           },
+          user: true,
+          customer: true,
         },
-        user: true,
-        customer: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.sale.count({ where }),
+    ]);
 
-    return sales.map(sale => {
+    const data = sales.map(sale => {
       const saleItems = sale.items.map(item => new SaleItemResponseDto({
         ...item,
         productName: item.product.name,
@@ -194,6 +201,8 @@ export class SalesService {
         customerFullName: sale.customer ? sale.customer.name : sale.customerName,
       });
     });
+
+    return { data, total };
   }
 
   /**
@@ -239,10 +248,8 @@ export class SalesService {
    * @returns La factura o ticket generado
    */
   async generateInvoice(id: string): Promise<SaleInvoiceDto> {
-    // Instead of using findOne which returns SaleResponseDto, we'll get the raw sale data
-    const saleId = id;
     const sale = await this.prisma.sale.findUnique({
-      where: { id: saleId },
+      where: { id },
       include: {
         items: {
           include: {
@@ -257,27 +264,28 @@ export class SalesService {
     if (!sale) {
       throw new NotFoundException(`Venta con ID ${id} no encontrada`);
     }
-    
+
     // Calcular subtotal y impuestos (18% IGV)
-    const subtotal = roundToTwoDecimals(sale.totalAmount / 1.18);
-    const tax = roundToTwoDecimals(sale.totalAmount - subtotal);
-    
+    const total = toAmount(sale.totalAmount);
+    const subtotal = roundToTwoDecimals(total / 1.18);
+    const tax = roundToTwoDecimals(total - subtotal);
+
     // Generar número de factura (formato: INV-YYYYMMDD-ID)
     const date = new Date(sale.createdAt);
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const invoiceNumber = `INV-${year}${month}${day}-${sale.id.substring(0, 8)}`;
-    
+
     // Crear ítems de la factura
     const invoiceItems = sale.items.map(item => new SaleInvoiceItemDto({
       productName: item.product.name,
       productDescription: item.product.description,
       quantity: item.quantity,
-      unitPrice: roundToTwoDecimals(item.price),
-      totalPrice: roundToTwoDecimals(item.price * item.quantity),
+      unitPrice: toAmount(item.price),
+      totalPrice: roundToTwoDecimals(toAmount(item.price) * item.quantity),
     }));
-    
+
     // Crear la factura
     return new SaleInvoiceDto({
       invoiceNumber,
@@ -286,9 +294,9 @@ export class SalesService {
       customerDocument: sale.customer?.documentNumber,
       sellerName: `${sale.user.firstName} ${sale.user.lastName}`,
       paymentMethod: sale.paymentMethod,
-      subtotal: roundToTwoDecimals(subtotal),
-      tax: roundToTwoDecimals(tax),
-      totalAmount: roundToTwoDecimals(sale.totalAmount),
+      subtotal,
+      tax,
+      totalAmount: total,
       items: invoiceItems,
     });
   }
@@ -302,62 +310,55 @@ export class SalesService {
   async update(id: string, updateSaleDto: UpdateSaleDto): Promise<SaleResponseDto> {
     // Verificar si la venta existe
     await this.findOne(id);
-    
+
     // No permitimos actualizar los ítems de una venta ya realizada
     // Solo permitimos actualizar información básica como el cliente o método de pago
     if (updateSaleDto.items) {
       throw new BadRequestException('No se pueden modificar los ítems de una venta ya realizada');
     }
-    
-    try {
-      // Verificar que el cliente existe si se proporciona un ID
-      if (updateSaleDto.customerId) {
-        const customer = await this.prisma.customer.findUnique({
-          where: { id: updateSaleDto.customerId },
-        });
 
-        if (!customer) {
-          throw new NotFoundException(`Cliente con ID ${updateSaleDto.customerId} no encontrado`);
-        }
-      }
-      
-      // Actualizar la venta
-      const updatedSale = await this.prisma.sale.update({
-        where: { id },
-        data: {
-          customerId: updateSaleDto.customerId,
-          customerName: updateSaleDto.customerName,
-          paymentMethod: updateSaleDto.paymentMethod,
-        },
-        include: {
-          items: {
-            include: {
-              product: true,
-            },
-          },
-          user: true,
-          customer: true,
-        },
+    // Verificar que el cliente existe si se proporciona un ID
+    if (updateSaleDto.customerId) {
+      const customer = await this.prisma.customer.findUnique({
+        where: { id: updateSaleDto.customerId },
       });
-      
-      const saleItems = updatedSale.items.map(item => new SaleItemResponseDto({
-        ...item,
-        productName: item.product.name,
-        productDescription: item.product.description,
-      }));
 
-      return new SaleResponseDto({
-        ...updatedSale,
-        items: saleItems,
-        userName: `${updatedSale.user.firstName} ${updatedSale.user.lastName}`,
-        customerFullName: updatedSale.customer ? updatedSale.customer.name : updatedSale.customerName,
-      });
-    } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
-        throw error;
+      if (!customer) {
+        throw new NotFoundException(`Cliente con ID ${updateSaleDto.customerId} no encontrado`);
       }
-      throw new BadRequestException(`Error al actualizar la venta: ${error.message}`);
     }
+
+    // Actualizar la venta
+    const updatedSale = await this.prisma.sale.update({
+      where: { id },
+      data: {
+        customerId: updateSaleDto.customerId,
+        customerName: updateSaleDto.customerName,
+        paymentMethod: updateSaleDto.paymentMethod,
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        user: true,
+        customer: true,
+      },
+    });
+
+    const saleItems = updatedSale.items.map(item => new SaleItemResponseDto({
+      ...item,
+      productName: item.product.name,
+      productDescription: item.product.description,
+    }));
+
+    return new SaleResponseDto({
+      ...updatedSale,
+      items: saleItems,
+      userName: `${updatedSale.user.firstName} ${updatedSale.user.lastName}`,
+      customerFullName: updatedSale.customer ? updatedSale.customer.name : updatedSale.customerName,
+    });
   }
 
   /**
@@ -368,36 +369,32 @@ export class SalesService {
   async remove(id: string): Promise<{ message: string }> {
     // Verificar si la venta existe
     const sale = await this.findOne(id);
-    
-    try {
-      // Eliminar la venta y restaurar el stock en una transacción
-      await this.prisma.$transaction(async (prisma) => {
-        // Restaurar el stock de los productos
-        for (const item of sale.items) {
-          await prisma.product.update({
-            where: { id: item.productId },
-            data: {
-              stock: {
-                increment: item.quantity,
-              },
+
+    // Eliminar la venta y restaurar el stock en una transacción
+    await this.prisma.$transaction(async (prisma) => {
+      // Restaurar el stock de los productos
+      for (const item of sale.items) {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: {
+            stock: {
+              increment: item.quantity,
             },
-          });
-        }
-        
-        // Eliminar los ítems de la venta
-        await prisma.saleItem.deleteMany({
-          where: { saleId: id },
+          },
         });
-        
-        // Eliminar la venta
-        await prisma.sale.delete({
-          where: { id },
-        });
+      }
+
+      // Eliminar los ítems de la venta
+      await prisma.saleItem.deleteMany({
+        where: { saleId: id },
       });
-      
-      return { message: 'Venta eliminada correctamente' };
-    } catch (error) {
-      throw new BadRequestException(`Error al eliminar la venta: ${error.message}`);
-    }
+
+      // Eliminar la venta
+      await prisma.sale.delete({
+        where: { id },
+      });
+    });
+
+    return { message: 'Venta eliminada correctamente' };
   }
 }

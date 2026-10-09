@@ -8,6 +8,7 @@ import * as xlsx from 'xlsx';
 import csvParser from 'csv-parser';
 import { Readable } from 'stream';
 import { ImportFileType } from './dto/import-products.dto';
+import { Paged } from '../common/pagination/pagination.utils';
 // Importar correctamente los tipos de Multer
 import { Response } from 'express';
 import * as Multer from 'multer';
@@ -56,46 +57,53 @@ export class ProductsService {
         imageUrl: createProductDto.imageUrl,
       });
     } catch (error) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      throw new BadRequestException(`Error al crear el producto: ${error.message}`);
+      // Re-lanza el error original: los errores de Prisma los mapea el filtro
+      // global (P2002 -> 409, P2025/P2003 -> 404/409) y los demas -> 500 real
+      throw error;
     }
   }
 
   /**
-   * Obtiene todos los productos
-   * @param category Filtro opcional por categoría
-   * @param active Filtro opcional por estado activo/inactivo
-   * @returns Lista de productos
+   * Obtiene una página de productos
+   * @param params Filtros opcionales (categoría, activo/inactivo) y paginación
+   * @returns Página de productos y total de registros que cumplen el filtro
    */
-  async findAll(category?: string, active?: boolean): Promise<ProductResponseDto[]> {
+  async findAll(
+    params: { category?: string; active?: boolean; skip?: number; take?: number } = {},
+  ): Promise<Paged<ProductResponseDto>> {
     const where: Prisma.ProductWhereInput = {};
-    
-    if (category) {
-      where.category = category;
-    }
-    
-    if (active !== undefined) {
-      where.isActive = active;
+
+    if (params.category) {
+      where.category = params.category;
     }
 
-    const products = await this.prisma.product.findMany({
-      where,
-      orderBy: {
-        name: 'asc',
-      },
-    });
+    if (params.active !== undefined) {
+      where.isActive = params.active;
+    }
 
-    return products.map(product => {
+    const [products, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    const data = products.map(product => {
       // Extraer metadatos de la descripción si existen
       const metadata = this.extractMetadata(product.description);
-      
+
       return new ProductResponseDto({
         ...product,
         ...metadata,
       });
     });
+
+    return { data, total };
   }
 
   /**
@@ -214,10 +222,8 @@ export class ProductsService {
         imageUrl: updateProductDto.imageUrl,
       });
     } catch (error) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      throw new BadRequestException(`Error al actualizar el producto: ${error.message}`);
+      // Re-lanza el error original (ver comentario en create)
+      throw error;
     }
   }
 
@@ -297,7 +303,8 @@ export class ProductsService {
 
       return { message: 'Producto eliminado correctamente' };
     } catch (error) {
-      throw new BadRequestException(`Error al eliminar el producto: ${error.message}`);
+      // Re-lanza el error original (ver comentario en create)
+      throw error;
     }
   }
 

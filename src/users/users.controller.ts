@@ -9,8 +9,11 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Res,
+  BadRequestException,
   ForbiddenException
 } from '@nestjs/common';
+import { Response } from 'express';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -19,6 +22,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 import { UserResponseDto } from './dto/user-response.dto';
+import { parsePagination } from '../common/pagination/pagination.utils';
 
 /**
  * UsersController - Controlador para la gestión de usuarios
@@ -53,13 +57,29 @@ export class UsersController {
 
   /**
    * Obtiene todos los usuarios
-   * @returns Lista de usuarios
+   * @param page Página (base 1, por defecto 1)
+   * @param limit Registros por página (por defecto 20, máx. 100)
+   * @param role Filtra por rol (ADMIN | TECHNICIAN)
+   * @returns Página de usuarios. El total sin paginar viaja en X-Total-Count
    * @access Solo administradores
    */
   @Get()
   @Roles(Role.ADMIN)
-  findAll(): Promise<UserResponseDto[]> {
-    return this.usersService.findAll();
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('role') role?: Role,
+  ): Promise<UserResponseDto[]> {
+    // El query param llega como texto: se valida contra el enum antes de tocar la BD
+    if (role && !Object.values(Role).includes(role)) {
+      throw new BadRequestException(`Rol inválido: ${role}`);
+    }
+
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.usersService.findAll({ role, skip, take });
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   /**

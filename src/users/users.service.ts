@@ -4,6 +4,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { Prisma, Role } from '@prisma/client';
+import { Paged } from '../common/pagination/pagination.utils';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -53,12 +55,26 @@ export class UsersService {
   }
 
   /**
-   * Obtiene todos los usuarios
-   * @returns Lista de usuarios (sin contraseñas)
+   * Obtiene una página de usuarios
+   * @param params Filtro opcional por rol y paginación
+   * @returns Página de usuarios (sin contraseñas) y total de registros
    */
-  async findAll(): Promise<UserResponseDto[]> {
-    const users = await this.prisma.user.findMany();
-    return users.map(user => new UserResponseDto(user));
+  async findAll(
+    params: { role?: Role; skip?: number; take?: number } = {},
+  ): Promise<Paged<UserResponseDto>> {
+    const where: Prisma.UserWhereInput = params.role ? { role: params.role } : {};
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return { data: users.map(user => new UserResponseDto(user)), total };
   }
 
   /**
@@ -144,15 +160,12 @@ export class UsersService {
     // Verifica si el usuario existe
     await this.findOne(id);
 
-    try {
-      await this.prisma.user.update({
-        where: { id },
-        data: { isActive: false },
-      });
-      return { message: 'User deactivated successfully' };
-    } catch (error) {
-      throw new BadRequestException('Cannot deactivate user.');
-    }
+    await this.prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
+
+    return { message: 'User deactivated successfully' };
   }
 
   /**
