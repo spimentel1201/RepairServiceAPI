@@ -140,5 +140,8 @@ de `_prisma_migrations` antes del paso 1 (el SQL está documentado en la cabecer
   (dependencia de `jsonwebtoken`) crashea. Usa Node 20 o 22 LTS.
 - **`prisma generate` falla con `EPERM`:** el proceso de la API está corriendo y bloquea
   los binarios de Prisma; detén el servidor.
-- **Faltan variables de entorno:** la API valida `DATABASE_URL` y `JWT_SECRET` al
-  arrancar y aborta con un mensaje claro (copia `.env.example` a `.env`).
+- **Faltan variables de entorno:** la API carga el `.env` de la raíz automáticamente
+  (dotenv) y valida `DATABASE_URL` y `JWT_SECRET` al arrancar, abortando con un
+  mensaje claro si faltan. Atención: un valor que empieza con `#` se interpreta como
+  comentario del `.env` y queda vacío; envuélvelo en comillas dobles
+  (`JWT_SECRET="..."`).

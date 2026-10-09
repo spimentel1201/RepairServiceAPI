@@ -1,3 +1,7 @@
+// Carga .env ANTES de cualquier validacion (assertRequiredEnv corre en
+// bootstrap y ConfigModule recien lo lee al inicializar el contenedor).
+// En Vercel no hay .env: el import es inocuo y las variables vienen del entorno.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
