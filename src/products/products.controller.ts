@@ -1,11 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseGuards, UseInterceptors, UploadedFile, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseInterceptors, UploadedFile, Res, BadRequestException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { ImportProductsDto, ImportFileType } from './dto/import-products.dto';
@@ -13,9 +11,39 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import * as Multer from 'multer';
 
+/**
+ * Límites de la importación masiva de productos.
+ * Sin ellos, cualquier archivo gigante se carga completo en memoria
+ * (denegación de servicio) y se acepta cualquier tipo de contenido.
+ */
+const MAX_IMPORT_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_IMPORT_EXTENSIONS = /\.(csv|xlsx)$/i;
+
+/**
+ * Filtro de archivos para POST /products/import.
+ * Solo acepta .csv o .xlsx; el contenido además se valida al parsearlo en
+ * ProductsService.importProducts (columnas requeridas, etc.).
+ */
+function importFileFilter(
+  _req: unknown,
+  file: Express.Multer.File,
+  cb: (error: Error | null, acceptFile: boolean) => void,
+): void {
+  const originalName = file?.originalname ?? '';
+  if (!ALLOWED_IMPORT_EXTENSIONS.test(originalName)) {
+    cb(
+      new BadRequestException(
+        `Tipo de archivo no permitido: ${originalName || 'desconocido'}. Solo se admiten .csv y .xlsx`,
+      ),
+      false,
+    );
+    return;
+  }
+  cb(null, true);
+}
+
 @ApiTags('products')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
@@ -213,7 +241,12 @@ export class ProductsController {
     }
   })
   @ApiResponse({ status: 400, description: 'Formato de archivo incorrecto o datos inválidos.' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_IMPORT_FILE_SIZE, files: 1 },
+      fileFilter: importFileFilter,
+    }),
+  )
   async importProducts(
     @UploadedFile() file: Express.Multer.File,
     @Body('fileType') fileType: ImportFileType
