@@ -15,6 +15,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { AppThrottlerModule } from './throttler/throttler.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AppThrottlerModule } from './throttler/throttler.module';
     SalesModule,
     AuthModule,
     AppThrottlerModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
