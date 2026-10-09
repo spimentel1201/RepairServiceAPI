@@ -13,11 +13,11 @@ import { Prisma } from '@prisma/client';
 import {
   RepairOrderItemResponseDto,
   RepairOrderResponseDto,
-} from 'src/repair-orders/dto/repair-order-response.dto';
+} from '../repair-orders/dto/repair-order-response.dto';
 import {
   QuoteItemResponseDto,
   QuoteResponseDto,
-} from 'src/quotes/dto/quote-response.dto';
+} from '../quotes/dto/quote-response.dto';
 import { Paged } from '../common/pagination/pagination.utils';
 
 @Injectable()
