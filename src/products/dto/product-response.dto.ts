@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class ProductResponseDto {
   @ApiProperty()
@@ -34,7 +35,10 @@ export class ProductResponseDto {
   @ApiProperty()
   updatedAt: Date;
 
-  constructor(partial: Partial<ProductResponseDto>) {
+  constructor(partial: Partial<ProductResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
+    this.price = toAmount(this.price);
+    this.cost = toAmount(this.cost);
   }
 }

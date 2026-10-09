@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class SaleItemResponseDto {
   @ApiProperty()
@@ -30,8 +31,10 @@ export class SaleItemResponseDto {
   @ApiPropertyOptional()
   productDescription?: string;
 
-  constructor(partial: Partial<SaleItemResponseDto>) {
+  constructor(partial: Partial<SaleItemResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
+    this.price = toAmount(this.price);
   }
 }
 
@@ -70,7 +73,11 @@ export class SaleResponseDto {
   @ApiPropertyOptional()
   customerFullName?: string;
 
-  constructor(partial: Partial<SaleResponseDto>) {
+  constructor(partial: Partial<SaleResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    this.totalAmount = toAmount(this.totalAmount);
+    this.items = (Array.isArray(this.items) ? this.items : []).map(
+      (item) => new SaleItemResponseDto(item),
+    );
   }
 }

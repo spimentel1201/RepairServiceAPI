@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RepairOrderStatus } from '@prisma/client';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'ID del ítem' })
@@ -41,8 +42,10 @@ export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'Fecha de actualización' })
   updatedAt: Date;
 
-  constructor(partial: Partial<RepairOrderItemResponseDto>) {
+  constructor(partial: Partial<RepairOrderItemResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
+    this.price = toAmount(this.price);
   }
 }
 
@@ -89,7 +92,12 @@ export class RepairOrderResponseDto {
   @ApiProperty({ description: 'Ítems de la orden', type: [RepairOrderItemResponseDto] })
   items: RepairOrderItemResponseDto[];
 
-  constructor(partial: Partial<RepairOrderResponseDto>) {
+  constructor(partial: Partial<RepairOrderResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    this.initialReviewCost = toAmount(this.initialReviewCost);
+    this.totalCost = toAmount(this.totalCost);
+    this.items = (Array.isArray(this.items) ? this.items : []).map(
+      (item) => new RepairOrderItemResponseDto(item),
+    );
   }
 }

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class SaleInvoiceItemDto {
   @ApiProperty()
@@ -17,8 +18,10 @@ export class SaleInvoiceItemDto {
   @ApiProperty()
   totalPrice: number;
 
-  constructor(partial: Partial<SaleInvoiceItemDto>) {
+  constructor(partial: Partial<SaleInvoiceItemDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    this.unitPrice = toAmount(this.unitPrice);
+    this.totalPrice = toAmount(this.totalPrice);
   }
 }
 
@@ -53,7 +56,13 @@ export class SaleInvoiceDto {
   @ApiProperty({ type: [SaleInvoiceItemDto] })
   items: SaleInvoiceItemDto[];
 
-  constructor(partial: Partial<SaleInvoiceDto>) {
+  constructor(partial: Partial<SaleInvoiceDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    this.subtotal = toAmount(this.subtotal);
+    this.tax = toAmount(this.tax);
+    this.totalAmount = toAmount(this.totalAmount);
+    this.items = (Array.isArray(this.items) ? this.items : []).map(
+      (item) => new SaleInvoiceItemDto(item),
+    );
   }
 }
