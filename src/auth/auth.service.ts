@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
@@ -8,7 +13,7 @@ import { Role } from '@prisma/client';
 
 /**
  * AuthService - Servicio de autenticación y autorización
- * 
+ *
  * Este servicio maneja:
  * - Validación de credenciales de usuario
  * - Inicio de sesión y generación de tokens JWT
@@ -31,8 +36,8 @@ export class AuthService {
    */
   async validateUser(email: string, password: string): Promise<any> {
     const user = await this.usersService.findByEmail(email);
-    if (user && await bcrypt.compare(password, user.password)) {
-      const { password, ...result } = user;
+    if (user && (await bcrypt.compare(password, user.password))) {
+      const { password: _password, ...result } = user;
       return result;
     }
     return null;
@@ -75,7 +80,9 @@ export class AuthService {
       this.configService.get('REGISTRATION_ENABLED', 'true'),
     ).toLowerCase();
     if (['false', '0', 'no'].includes(registrationEnabled)) {
-      throw new ForbiddenException('El registro de usuarios está deshabilitado');
+      throw new ForbiddenException(
+        'El registro de usuarios está deshabilitado',
+      );
     }
 
     // Verifica si el usuario ya existe

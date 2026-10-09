@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateQuoteDto, CreateQuoteItemDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
@@ -18,7 +22,10 @@ export class QuotesService {
    */
   private calculateTotal(items: CreateQuoteItemDto[]): number {
     return roundToTwoDecimals(
-      items.reduce((sum, item) => sum + toAmount(item.price) * item.quantity, 0),
+      items.reduce(
+        (sum, item) => sum + toAmount(item.price) * item.quantity,
+        0,
+      ),
     );
   }
 
@@ -30,7 +37,9 @@ export class QuotesService {
   async create(createQuoteDto: CreateQuoteDto): Promise<QuoteResponseDto> {
     // Verificar que al menos hay un ítem
     if (!createQuoteDto.items || createQuoteDto.items.length === 0) {
-      throw new BadRequestException('El presupuesto debe tener al menos un ítem');
+      throw new BadRequestException(
+        'El presupuesto debe tener al menos un ítem',
+      );
     }
 
     // Verificar si la orden de reparación existe
@@ -39,7 +48,9 @@ export class QuotesService {
     });
 
     if (!repairOrder) {
-      throw new NotFoundException(`Orden de reparación con ID ${createQuoteDto.repairOrderId} no encontrada`);
+      throw new NotFoundException(
+        `Orden de reparación con ID ${createQuoteDto.repairOrderId} no encontrada`,
+      );
     }
 
     // Verificar si el cliente existe
@@ -48,7 +59,9 @@ export class QuotesService {
     });
 
     if (!customer) {
-      throw new NotFoundException(`Cliente con ID ${createQuoteDto.customerId} no encontrado`);
+      throw new NotFoundException(
+        `Cliente con ID ${createQuoteDto.customerId} no encontrado`,
+      );
     }
 
     // Verificar si el técnico existe
@@ -57,7 +70,9 @@ export class QuotesService {
     });
 
     if (!technician) {
-      throw new NotFoundException(`Técnico con ID ${createQuoteDto.technicianId} no encontrado`);
+      throw new NotFoundException(
+        `Técnico con ID ${createQuoteDto.technicianId} no encontrado`,
+      );
     }
 
     // Crear el presupuesto con sus ítems en una transacción
@@ -71,7 +86,7 @@ export class QuotesService {
           status: createQuoteDto.status || QuoteStatus.PENDING,
           totalAmount: this.calculateTotal(createQuoteDto.items),
           items: {
-            create: createQuoteDto.items.map(item => ({
+            create: createQuoteDto.items.map((item) => ({
               quantity: item.quantity,
               price: toAmount(item.price),
               description: item.description,
@@ -94,7 +109,9 @@ export class QuotesService {
    * @param params Paginación
    * @returns Página de presupuestos y total de registros
    */
-  async findAll(params: { skip?: number; take?: number } = {}): Promise<Paged<QuoteResponseDto>> {
+  async findAll(
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<QuoteResponseDto>> {
     const [quotes, total] = await Promise.all([
       this.prisma.quote.findMany({
         skip: params.skip,
@@ -114,7 +131,7 @@ export class QuotesService {
       this.prisma.quote.count(),
     ]);
 
-    return { data: quotes.map(quote => new QuoteResponseDto(quote)), total };
+    return { data: quotes.map((quote) => new QuoteResponseDto(quote)), total };
   }
 
   /**
@@ -155,7 +172,9 @@ export class QuotesService {
     });
 
     if (!repairOrder) {
-      throw new NotFoundException(`Orden de reparación con ID ${repairOrderId} no encontrada`);
+      throw new NotFoundException(
+        `Orden de reparación con ID ${repairOrderId} no encontrada`,
+      );
     }
 
     const quotes = await this.prisma.quote.findMany({
@@ -165,7 +184,7 @@ export class QuotesService {
       },
     });
 
-    return quotes.map(quote => new QuoteResponseDto(quote));
+    return quotes.map((quote) => new QuoteResponseDto(quote));
   }
 
   /**
@@ -189,7 +208,7 @@ export class QuotesService {
       },
     });
 
-    return quotes.map(quote => new QuoteResponseDto(quote));
+    return quotes.map((quote) => new QuoteResponseDto(quote));
   }
 
   /**
@@ -198,7 +217,10 @@ export class QuotesService {
    * @param updateQuoteDto Datos para actualizar
    * @returns El presupuesto actualizado
    */
-  async update(id: string, updateQuoteDto: UpdateQuoteDto): Promise<QuoteResponseDto> {
+  async update(
+    id: string,
+    updateQuoteDto: UpdateQuoteDto,
+  ): Promise<QuoteResponseDto> {
     // Verificar si el presupuesto existe
     await this.findOne(id);
 
@@ -209,7 +231,9 @@ export class QuotesService {
       });
 
       if (!repairOrder) {
-        throw new NotFoundException(`Orden de reparación con ID ${updateQuoteDto.repairOrderId} no encontrada`);
+        throw new NotFoundException(
+          `Orden de reparación con ID ${updateQuoteDto.repairOrderId} no encontrada`,
+        );
       }
     }
 
@@ -220,7 +244,9 @@ export class QuotesService {
       });
 
       if (!customer) {
-        throw new NotFoundException(`Cliente con ID ${updateQuoteDto.customerId} no encontrado`);
+        throw new NotFoundException(
+          `Cliente con ID ${updateQuoteDto.customerId} no encontrado`,
+        );
       }
     }
 
@@ -231,7 +257,9 @@ export class QuotesService {
       });
 
       if (!technician) {
-        throw new NotFoundException(`Técnico con ID ${updateQuoteDto.technicianId} no encontrado`);
+        throw new NotFoundException(
+          `Técnico con ID ${updateQuoteDto.technicianId} no encontrado`,
+        );
       }
     }
 
@@ -254,7 +282,7 @@ export class QuotesService {
             status: updateQuoteDto.status,
             totalAmount: this.calculateTotal(updateQuoteDto.items),
             items: {
-              create: updateQuoteDto.items.map(item => ({
+              create: updateQuoteDto.items.map((item) => ({
                 quantity: item.quantity,
                 price: toAmount(item.price),
                 description: item.description,
@@ -292,7 +320,10 @@ export class QuotesService {
    * @param status Nuevo estado
    * @returns El presupuesto actualizado
    */
-  async updateStatus(id: string, status: QuoteStatus): Promise<QuoteResponseDto> {
+  async updateStatus(
+    id: string,
+    status: QuoteStatus,
+  ): Promise<QuoteResponseDto> {
     // Verificar si el presupuesto existe
     await this.findOne(id);
 

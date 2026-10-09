@@ -24,7 +24,9 @@ export class QuoteItemResponseDto {
   @ApiProperty()
   updatedAt: Date;
 
-  constructor(partial: Partial<QuoteItemResponseDto> | Record<string, unknown>) {
+  constructor(
+    partial: Partial<QuoteItemResponseDto> | Record<string, unknown>,
+  ) {
     Object.assign(this, partial);
     // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
     this.price = toAmount(this.price);

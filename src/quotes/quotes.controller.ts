@@ -1,10 +1,29 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, Res, NotFoundException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+  Query,
+  Res,
+} from '@nestjs/common';
 import { QuotesService } from './quotes.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 import { QuoteStatus } from '@prisma/client';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Response } from 'express';
 import { parsePagination } from '../common/pagination/pagination.utils';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -19,13 +38,16 @@ export class QuotesController {
   @Post()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Crear un nuevo presupuesto' })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'El presupuesto ha sido creado exitosamente.',
-    type: QuoteResponseDto
+    type: QuoteResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
-  @ApiResponse({ status: 404, description: 'Orden de reparación, cliente o técnico no encontrado.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Orden de reparación, cliente o técnico no encontrado.',
+  })
   @ApiBody({ type: CreateQuoteDto })
   create(@Body() createQuoteDto: CreateQuoteDto): Promise<QuoteResponseDto> {
     return this.quotesService.create(createQuoteDto);
@@ -34,12 +56,21 @@ export class QuotesController {
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todos los presupuestos' })
-  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
-  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Retorna una página de presupuestos. El total de registros sin paginar se expone en la cabecera X-Total-Count',
-    type: [QuoteResponseDto]
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Retorna una página de presupuestos. El total de registros sin paginar se expone en la cabecera X-Total-Count',
+    type: [QuoteResponseDto],
   })
   async findAll(
     @Res({ passthrough: true }) res: Response,
@@ -56,10 +87,10 @@ export class QuotesController {
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener un presupuesto por ID' })
   @ApiParam({ name: 'id', description: 'ID del presupuesto' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Retorna el presupuesto',
-    type: QuoteResponseDto
+    type: QuoteResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Presupuesto no encontrado.' })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<QuoteResponseDto> {
@@ -68,15 +99,25 @@ export class QuotesController {
 
   @Get('repair-order/:repairOrderId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Obtener todos los presupuestos de una orden de reparación' })
-  @ApiParam({ name: 'repairOrderId', description: 'ID de la orden de reparación' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Retorna todos los presupuestos de la orden de reparación',
-    type: [QuoteResponseDto]
+  @ApiOperation({
+    summary: 'Obtener todos los presupuestos de una orden de reparación',
   })
-  @ApiResponse({ status: 404, description: 'Orden de reparación no encontrada.' })
-  findByRepairOrder(@Param('repairOrderId', ParseUUIDPipe) repairOrderId: string): Promise<QuoteResponseDto[]> {
+  @ApiParam({
+    name: 'repairOrderId',
+    description: 'ID de la orden de reparación',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Retorna todos los presupuestos de la orden de reparación',
+    type: [QuoteResponseDto],
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Orden de reparación no encontrada.',
+  })
+  findByRepairOrder(
+    @Param('repairOrderId', ParseUUIDPipe) repairOrderId: string,
+  ): Promise<QuoteResponseDto[]> {
     return this.quotesService.findByRepairOrder(repairOrderId);
   }
 
@@ -84,13 +125,15 @@ export class QuotesController {
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todos los presupuestos de un cliente' })
   @ApiParam({ name: 'customerId', description: 'ID del cliente' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Retorna todos los presupuestos del cliente',
-    type: [QuoteResponseDto]
+    type: [QuoteResponseDto],
   })
   @ApiResponse({ status: 404, description: 'Cliente no encontrado.' })
-  findByCustomer(@Param('customerId', ParseUUIDPipe) customerId: string): Promise<QuoteResponseDto[]> {
+  findByCustomer(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+  ): Promise<QuoteResponseDto[]> {
     return this.quotesService.findByCustomer(customerId);
   }
 
@@ -99,16 +142,20 @@ export class QuotesController {
   @ApiOperation({ summary: 'Actualizar un presupuesto' })
   @ApiParam({ name: 'id', description: 'ID del presupuesto' })
   @ApiBody({ type: UpdateQuoteDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'El presupuesto ha sido actualizado exitosamente.',
-    type: QuoteResponseDto
+    type: QuoteResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
-  @ApiResponse({ status: 404, description: 'Presupuesto, orden de reparación, cliente o técnico no encontrado.' })
+  @ApiResponse({
+    status: 404,
+    description:
+      'Presupuesto, orden de reparación, cliente o técnico no encontrado.',
+  })
   update(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() updateQuoteDto: UpdateQuoteDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateQuoteDto: UpdateQuoteDto,
   ): Promise<QuoteResponseDto> {
     return this.quotesService.update(id, updateQuoteDto);
   }
@@ -117,28 +164,28 @@ export class QuotesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Actualizar el estado de un presupuesto' })
   @ApiParam({ name: 'id', description: 'ID del presupuesto' })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
         status: {
           type: 'string',
           enum: Object.values(QuoteStatus),
-          example: QuoteStatus.APPROVED
-        }
-      }
-    }
+          example: QuoteStatus.APPROVED,
+        },
+      },
+    },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'El estado del presupuesto ha sido actualizado exitosamente.',
-    type: QuoteResponseDto
+    type: QuoteResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
   @ApiResponse({ status: 404, description: 'Presupuesto no encontrado.' })
   updateStatus(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body('status') status: QuoteStatus
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('status') status: QuoteStatus,
   ): Promise<QuoteResponseDto> {
     return this.quotesService.updateStatus(id, status);
   }
@@ -147,18 +194,18 @@ export class QuotesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar un presupuesto' })
   @ApiParam({ name: 'id', description: 'ID del presupuesto' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'El presupuesto ha sido eliminado exitosamente.',
     schema: {
       type: 'object',
       properties: {
         message: {
           type: 'string',
-          example: 'Presupuesto eliminado correctamente'
-        }
-      }
-    }
+          example: 'Presupuesto eliminado correctamente',
+        },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
   @ApiResponse({ status: 404, description: 'Presupuesto no encontrado.' })
@@ -170,25 +217,27 @@ export class QuotesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Enviar presupuesto por email' })
   @ApiParam({ name: 'id', description: 'ID del presupuesto' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'El presupuesto ha sido enviado exitosamente por email.',
     schema: {
       type: 'object',
       properties: {
         message: {
           type: 'string',
-          example: 'Presupuesto enviado por email correctamente'
-        }
-      }
-    }
+          example: 'Presupuesto enviado por email correctamente',
+        },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
   @ApiResponse({ status: 404, description: 'Presupuesto no encontrado.' })
-  async sendEmail(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
+  async sendEmail(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ message: string }> {
     // Verificar si el presupuesto existe
     await this.quotesService.findOne(id);
-    
+
     // Aquí iría la lógica para enviar el email
     // Por ahora solo retornamos un mensaje de éxito
     return { message: 'Presupuesto enviado por email correctamente' };

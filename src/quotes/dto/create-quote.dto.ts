@@ -1,6 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayNotEmpty, IsArray, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { QuoteStatus } from '@prisma/client';
 
 export class CreateQuoteItemDto {
@@ -40,25 +51,26 @@ export class CreateQuoteDto {
   @IsNotEmpty()
   technicianId: string;
 
-  @ApiPropertyOptional({ 
-    description: 'Estado del presupuesto', 
+  @ApiPropertyOptional({
+    description: 'Estado del presupuesto',
     enum: QuoteStatus,
-    default: QuoteStatus.PENDING
+    default: QuoteStatus.PENDING,
   })
   @IsEnum(QuoteStatus)
   @IsOptional()
   status?: QuoteStatus;
 
   @ApiPropertyOptional({
-    description: 'Ignorado: el total siempre lo calcula el servidor como Σ (precio * cantidad)',
+    description:
+      'Ignorado: el total siempre lo calcula el servidor como Σ (precio * cantidad)',
   })
   @IsNumber()
   @IsOptional()
   totalAmount?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Ítems del presupuesto',
-    type: [CreateQuoteItemDto]
+    type: [CreateQuoteItemDto],
   })
   @IsArray()
   @ArrayNotEmpty({ message: 'El presupuesto debe tener al menos un ítem' })

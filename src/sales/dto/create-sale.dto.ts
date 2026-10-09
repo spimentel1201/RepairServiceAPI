@@ -1,5 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '@prisma/client';
 
@@ -27,7 +40,10 @@ export class CreateSaleItemDto {
 }
 
 export class CreateSaleDto {
-  @ApiPropertyOptional({ description: 'ID del cliente (opcional para ventas a clientes no registrados)' })
+  @ApiPropertyOptional({
+    description:
+      'ID del cliente (opcional para ventas a clientes no registrados)',
+  })
   @IsUUID()
   @IsOptional()
   customerId?: string;

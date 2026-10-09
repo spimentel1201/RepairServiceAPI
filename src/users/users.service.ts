@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -10,14 +15,14 @@ import * as bcrypt from 'bcrypt';
 
 /**
  * UsersService - Servicio para la gestión de usuarios
- * 
+ *
  * Este servicio implementa la lógica de negocio para:
  * - Crear usuarios
  * - Buscar usuarios (por ID o email)
  * - Actualizar usuarios
  * - Desactivar usuarios (eliminación lógica)
  * - Cambiar contraseñas
- * 
+ *
  * Utiliza PrismaService para interactuar con la base de datos
  * y bcrypt para el manejo seguro de contraseñas.
  */
@@ -62,7 +67,9 @@ export class UsersService {
   async findAll(
     params: { role?: Role; skip?: number; take?: number } = {},
   ): Promise<Paged<UserResponseDto>> {
-    const where: Prisma.UserWhereInput = params.role ? { role: params.role } : {};
+    const where: Prisma.UserWhereInput = params.role
+      ? { role: params.role }
+      : {};
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -74,7 +81,7 @@ export class UsersService {
       this.prisma.user.count({ where }),
     ]);
 
-    return { data: users.map(user => new UserResponseDto(user)), total };
+    return { data: users.map((user) => new UserResponseDto(user)), total };
   }
 
   /**
@@ -120,7 +127,10 @@ export class UsersService {
    * @throws NotFoundException si el usuario no existe
    * @throws ConflictException si el nuevo email ya está en uso
    */
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
     // Verifica si el usuario existe
     await this.findOne(id);
 
@@ -136,7 +146,7 @@ export class UsersService {
     }
 
     // Si se actualiza la contraseña, la encripta
-    let data = { ...updateUserDto };
+    const data = { ...updateUserDto };
     if (updateUserDto.password) {
       data.password = await bcrypt.hash(updateUserDto.password, 10);
     }

@@ -33,7 +33,9 @@ function toPositiveInt(
   if (value === undefined || value === null || value === '') return fallback;
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) {
-    throw new BadRequestException(`El parámetro "${name}" debe ser un entero mayor a 0`);
+    throw new BadRequestException(
+      `El parámetro "${name}" debe ser un entero mayor a 0`,
+    );
   }
   return max ? Math.min(n, max) : n;
 }
@@ -42,7 +44,10 @@ function toPositiveInt(
  * Normaliza los query params `page` / `limit`.
  * Valores por defecto: page=1, limit=20 (máximo permitido: 100).
  */
-export function parsePagination(page?: string, limit?: string): PaginationParams {
+export function parsePagination(
+  page?: string,
+  limit?: string,
+): PaginationParams {
   const p = toPositiveInt(page, 1, 'page');
   const l = toPositiveInt(limit, DEFAULT_LIMIT, 'limit', MAX_LIMIT);
   return { page: p, limit: l, skip: (p - 1) * l, take: l };

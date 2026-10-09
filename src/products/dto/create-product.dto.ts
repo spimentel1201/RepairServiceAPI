@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsBoolean, Min } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsBoolean,
+  Min,
+} from 'class-validator';
 
 export class CreateProductDto {
   @ApiProperty({ description: 'Nombre del producto' })
@@ -27,12 +35,17 @@ export class CreateProductDto {
   @Min(0)
   stock: number;
 
-  @ApiProperty({ description: 'Categoría del producto (ej: Repuestos, Accesorios, etc.)' })
+  @ApiProperty({
+    description: 'Categoría del producto (ej: Repuestos, Accesorios, etc.)',
+  })
   @IsString()
   @IsNotEmpty()
   category: string;
 
-  @ApiPropertyOptional({ description: 'Estado del producto (activo/inactivo)', default: true })
+  @ApiPropertyOptional({
+    description: 'Estado del producto (activo/inactivo)',
+    default: true,
+  })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;

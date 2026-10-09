@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
@@ -32,7 +36,10 @@ export class SalesService {
    * @param userId ID del usuario que realiza la venta
    * @returns La venta creada
    */
-  async create(createSaleDto: CreateSaleDto, userId: string): Promise<SaleResponseDto> {
+  async create(
+    createSaleDto: CreateSaleDto,
+    userId: string,
+  ): Promise<SaleResponseDto> {
     // Verificar que al menos hay un ítem en la venta
     if (!createSaleDto.items || createSaleDto.items.length === 0) {
       throw new BadRequestException('La venta debe tener al menos un ítem');
@@ -45,7 +52,9 @@ export class SalesService {
       });
 
       if (!customer) {
-        throw new NotFoundException(`Cliente con ID ${createSaleDto.customerId} no encontrado`);
+        throw new NotFoundException(
+          `Cliente con ID ${createSaleDto.customerId} no encontrado`,
+        );
       }
     } else if (!createSaleDto.customerName) {
       // Si no hay customerId ni customerName, establecer un valor por defecto
@@ -53,7 +62,9 @@ export class SalesService {
     }
 
     // Verificar que los productos existen (precios de catalogo)
-    const productIds = [...new Set(createSaleDto.items.map(item => item.productId))];
+    const productIds = [
+      ...new Set(createSaleDto.items.map((item) => item.productId)),
+    ];
     const products = await this.prisma.product.findMany({
       where: {
         id: { in: productIds },
@@ -64,7 +75,9 @@ export class SalesService {
       throw new BadRequestException('Uno o más productos no existen');
     }
 
-    const productMap = new Map(products.map(product => [product.id, product]));
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
 
     // Total calculado por el servidor: precio de catalogo * cantidad
     let totalAmount = 0;
@@ -73,7 +86,7 @@ export class SalesService {
 
       if (product.stock < item.quantity) {
         throw new BadRequestException(
-          `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
+          `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`,
         );
       }
 
@@ -95,7 +108,7 @@ export class SalesService {
 
         if (reserved.count === 0) {
           throw new BadRequestException(
-            `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`
+            `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`,
           );
         }
       }
@@ -109,7 +122,7 @@ export class SalesService {
           totalAmount,
           paymentMethod: createSaleDto.paymentMethod,
           items: {
-            create: createSaleDto.items.map(item => ({
+            create: createSaleDto.items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
               price: toAmount(productMap.get(item.productId).price),
@@ -125,7 +138,7 @@ export class SalesService {
     });
 
     // Preparar la respuesta
-    const saleItems = sale.items.map(item => {
+    const saleItems = sale.items.map((item) => {
       const product = productMap.get(item.productId);
       return new SaleItemResponseDto({
         ...item,
@@ -147,7 +160,9 @@ export class SalesService {
    * @param params Filtros opcionales (rango de fechas, cliente) y paginación
    * @returns Página de ventas y total de registros que cumplen el filtro
    */
-  async findAll(params: FindAllSalesParams = {}): Promise<Paged<SaleResponseDto>> {
+  async findAll(
+    params: FindAllSalesParams = {},
+  ): Promise<Paged<SaleResponseDto>> {
     const where: Prisma.SaleWhereInput = {};
 
     if (params.startDate || params.endDate) {
@@ -187,18 +202,23 @@ export class SalesService {
       this.prisma.sale.count({ where }),
     ]);
 
-    const data = sales.map(sale => {
-      const saleItems = sale.items.map(item => new SaleItemResponseDto({
-        ...item,
-        productName: item.product.name,
-        productDescription: item.product.description,
-      }));
+    const data = sales.map((sale) => {
+      const saleItems = sale.items.map(
+        (item) =>
+          new SaleItemResponseDto({
+            ...item,
+            productName: item.product.name,
+            productDescription: item.product.description,
+          }),
+      );
 
       return new SaleResponseDto({
         ...sale,
         items: saleItems,
         userName: `${sale.user.firstName} ${sale.user.lastName}`,
-        customerFullName: sale.customer ? sale.customer.name : sale.customerName,
+        customerFullName: sale.customer
+          ? sale.customer.name
+          : sale.customerName,
       });
     });
 
@@ -228,11 +248,14 @@ export class SalesService {
       throw new NotFoundException(`Venta con ID ${id} no encontrada`);
     }
 
-    const saleItems = sale.items.map(item => new SaleItemResponseDto({
-      ...item,
-      productName: item.product.name,
-      productDescription: item.product.description,
-    }));
+    const saleItems = sale.items.map(
+      (item) =>
+        new SaleItemResponseDto({
+          ...item,
+          productName: item.product.name,
+          productDescription: item.product.description,
+        }),
+    );
 
     return new SaleResponseDto({
       ...sale,
@@ -278,13 +301,16 @@ export class SalesService {
     const invoiceNumber = `INV-${year}${month}${day}-${sale.id.substring(0, 8)}`;
 
     // Crear ítems de la factura
-    const invoiceItems = sale.items.map(item => new SaleInvoiceItemDto({
-      productName: item.product.name,
-      productDescription: item.product.description,
-      quantity: item.quantity,
-      unitPrice: toAmount(item.price),
-      totalPrice: roundToTwoDecimals(toAmount(item.price) * item.quantity),
-    }));
+    const invoiceItems = sale.items.map(
+      (item) =>
+        new SaleInvoiceItemDto({
+          productName: item.product.name,
+          productDescription: item.product.description,
+          quantity: item.quantity,
+          unitPrice: toAmount(item.price),
+          totalPrice: roundToTwoDecimals(toAmount(item.price) * item.quantity),
+        }),
+    );
 
     // Crear la factura
     return new SaleInvoiceDto({
@@ -307,14 +333,19 @@ export class SalesService {
    * @param updateSaleDto Datos para actualizar
    * @returns La venta actualizada
    */
-  async update(id: string, updateSaleDto: UpdateSaleDto): Promise<SaleResponseDto> {
+  async update(
+    id: string,
+    updateSaleDto: UpdateSaleDto,
+  ): Promise<SaleResponseDto> {
     // Verificar si la venta existe
     await this.findOne(id);
 
     // No permitimos actualizar los ítems de una venta ya realizada
     // Solo permitimos actualizar información básica como el cliente o método de pago
     if (updateSaleDto.items) {
-      throw new BadRequestException('No se pueden modificar los ítems de una venta ya realizada');
+      throw new BadRequestException(
+        'No se pueden modificar los ítems de una venta ya realizada',
+      );
     }
 
     // Verificar que el cliente existe si se proporciona un ID
@@ -324,7 +355,9 @@ export class SalesService {
       });
 
       if (!customer) {
-        throw new NotFoundException(`Cliente con ID ${updateSaleDto.customerId} no encontrado`);
+        throw new NotFoundException(
+          `Cliente con ID ${updateSaleDto.customerId} no encontrado`,
+        );
       }
     }
 
@@ -347,17 +380,22 @@ export class SalesService {
       },
     });
 
-    const saleItems = updatedSale.items.map(item => new SaleItemResponseDto({
-      ...item,
-      productName: item.product.name,
-      productDescription: item.product.description,
-    }));
+    const saleItems = updatedSale.items.map(
+      (item) =>
+        new SaleItemResponseDto({
+          ...item,
+          productName: item.product.name,
+          productDescription: item.product.description,
+        }),
+    );
 
     return new SaleResponseDto({
       ...updatedSale,
       items: saleItems,
       userName: `${updatedSale.user.firstName} ${updatedSale.user.lastName}`,
-      customerFullName: updatedSale.customer ? updatedSale.customer.name : updatedSale.customerName,
+      customerFullName: updatedSale.customer
+        ? updatedSale.customer.name
+        : updatedSale.customerName,
     });
   }
 

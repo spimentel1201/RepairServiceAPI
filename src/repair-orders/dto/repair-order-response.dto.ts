@@ -33,7 +33,9 @@ export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'Precio unitario' })
   price: number;
 
-  @ApiPropertyOptional({ description: 'ID del producto relacionado (si aplica)' })
+  @ApiPropertyOptional({
+    description: 'ID del producto relacionado (si aplica)',
+  })
   productId?: string;
 
   @ApiProperty({ description: 'Fecha de creación' })
@@ -42,7 +44,9 @@ export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'Fecha de actualización' })
   updatedAt: Date;
 
-  constructor(partial: Partial<RepairOrderItemResponseDto> | Record<string, unknown>) {
+  constructor(
+    partial: Partial<RepairOrderItemResponseDto> | Record<string, unknown>,
+  ) {
     Object.assign(this, partial);
     // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
     this.price = toAmount(this.price);
@@ -89,10 +93,15 @@ export class RepairOrderResponseDto {
   @ApiPropertyOptional({ description: 'Fecha de finalización' })
   endDate?: Date;
 
-  @ApiProperty({ description: 'Ítems de la orden', type: [RepairOrderItemResponseDto] })
+  @ApiProperty({
+    description: 'Ítems de la orden',
+    type: [RepairOrderItemResponseDto],
+  })
   items: RepairOrderItemResponseDto[];
 
-  constructor(partial: Partial<RepairOrderResponseDto> | Record<string, unknown>) {
+  constructor(
+    partial: Partial<RepairOrderResponseDto> | Record<string, unknown>,
+  ) {
     Object.assign(this, partial);
     this.initialReviewCost = toAmount(this.initialReviewCost);
     this.totalCost = toAmount(this.totalCost);

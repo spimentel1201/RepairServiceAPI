@@ -4,11 +4,11 @@ import { ExecutionContext } from '@nestjs/common';
 
 /**
  * LoginThrottlerGuard - Guard para limitar intentos de inicio de sesión
- * 
+ *
  * Este guard extiende ThrottlerGuard para implementar limitación de tasa (rate limiting)
  * específicamente en los endpoints de inicio de sesión, ayudando a prevenir ataques
  * de fuerza bruta.
- * 
+ *
  * La limitación se aplica por combinación de dirección IP y correo electrónico,
  * lo que permite un control más granular.
  */
@@ -40,7 +40,9 @@ export class LoginThrottlerGuard extends ThrottlerGuard {
     const req = context.switchToHttp().getRequest();
     const isThrottled =
       req.method === 'POST' &&
-      LoginThrottlerGuard.THROTTLED_PATHS.some((path) => req.path.includes(path));
+      LoginThrottlerGuard.THROTTLED_PATHS.some((path) =>
+        req.path.includes(path),
+      );
 
     if (isThrottled) {
       return super.canActivate(context);

@@ -1,12 +1,23 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { CustomerHistoryDto } from './dto/customer-history.dto';
 import { Prisma } from '@prisma/client';
-import { RepairOrderItemResponseDto, RepairOrderResponseDto } from 'src/repair-orders/dto/repair-order-response.dto';
-import { QuoteItemResponseDto, QuoteResponseDto } from 'src/quotes/dto/quote-response.dto';
+import {
+  RepairOrderItemResponseDto,
+  RepairOrderResponseDto,
+} from 'src/repair-orders/dto/repair-order-response.dto';
+import {
+  QuoteItemResponseDto,
+  QuoteResponseDto,
+} from 'src/quotes/dto/quote-response.dto';
 import { Paged } from '../common/pagination/pagination.utils';
 
 @Injectable()
@@ -18,7 +29,9 @@ export class CustomersService {
    * @param createCustomerDto Datos para crear el cliente
    * @returns El cliente creado
    */
-  async create(createCustomerDto: CreateCustomerDto): Promise<CustomerResponseDto> {
+  async create(
+    createCustomerDto: CreateCustomerDto,
+  ): Promise<CustomerResponseDto> {
     try {
       const customer = await this.prisma.customer.create({
         data: createCustomerDto,
@@ -31,10 +44,14 @@ export class CustomersService {
         if (error.code === 'P2002') {
           const target = error.meta?.target as string[];
           if (target?.includes('email')) {
-            throw new ConflictException('El correo electrónico ya está registrado');
+            throw new ConflictException(
+              'El correo electrónico ya está registrado',
+            );
           }
           if (target?.includes('documentNumber')) {
-            throw new ConflictException('El número de documento ya está registrado');
+            throw new ConflictException(
+              'El número de documento ya está registrado',
+            );
           }
         }
       }
@@ -49,7 +66,9 @@ export class CustomersService {
    * @param params Paginación
    * @returns Página de clientes y total de registros
    */
-  async findAll(params: { skip?: number; take?: number } = {}): Promise<Paged<CustomerResponseDto>> {
+  async findAll(
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<CustomerResponseDto>> {
     const [customers, total] = await Promise.all([
       this.prisma.customer.findMany({
         skip: params.skip,
@@ -59,7 +78,10 @@ export class CustomersService {
       this.prisma.customer.count(),
     ]);
 
-    return { data: customers.map(customer => new CustomerResponseDto(customer)), total };
+    return {
+      data: customers.map((customer) => new CustomerResponseDto(customer)),
+      total,
+    };
   }
 
   /**
@@ -79,7 +101,7 @@ export class CustomersService {
       },
     });
 
-    return customers.map(customer => new CustomerResponseDto(customer));
+    return customers.map((customer) => new CustomerResponseDto(customer));
   }
 
   /**
@@ -127,22 +149,28 @@ export class CustomersService {
     }
 
     // Transformar repairOrders a RepairOrderResponseDto
-    const repairOrders = customer.repairOrders.map(order => 
-      new RepairOrderResponseDto({
-        ...order,
-        customerName: customer.name,
-        technicianName: order.technician?.firstName + ' ' + order.technician?.lastName || '', // Asumiendo que technician tiene una propiedad name
-        technicianId: order.technician?.id || '', // Asumiendo que technician tiene una propiedad id
-        items: order.items.map(item => new RepairOrderItemResponseDto(item))
-      })
+    const repairOrders = customer.repairOrders.map(
+      (order) =>
+        new RepairOrderResponseDto({
+          ...order,
+          customerName: customer.name,
+          technicianName:
+            order.technician?.firstName + ' ' + order.technician?.lastName ||
+            '', // Asumiendo que technician tiene una propiedad name
+          technicianId: order.technician?.id || '', // Asumiendo que technician tiene una propiedad id
+          items: order.items.map(
+            (item) => new RepairOrderItemResponseDto(item),
+          ),
+        }),
     );
 
     // Transformar quotes a QuoteResponseDto si es necesario
-    const quotes = customer.quotes.map(quote => 
-      new QuoteResponseDto({
-        ...quote,
-        items: quote.items.map(item => new QuoteItemResponseDto(item))
-      })
+    const quotes = customer.quotes.map(
+      (quote) =>
+        new QuoteResponseDto({
+          ...quote,
+          items: quote.items.map((item) => new QuoteItemResponseDto(item)),
+        }),
     );
 
     return new CustomerHistoryDto({
@@ -159,7 +187,10 @@ export class CustomersService {
    * @param updateCustomerDto Datos para actualizar
    * @returns El cliente actualizado
    */
-  async update(id: string, updateCustomerDto: UpdateCustomerDto): Promise<CustomerResponseDto> {
+  async update(
+    id: string,
+    updateCustomerDto: UpdateCustomerDto,
+  ): Promise<CustomerResponseDto> {
     // Verificar si el cliente existe
     await this.findOne(id);
 
@@ -176,10 +207,14 @@ export class CustomersService {
         if (error.code === 'P2002') {
           const target = error.meta?.target as string[];
           if (target?.includes('email')) {
-            throw new ConflictException('El correo electrónico ya está registrado');
+            throw new ConflictException(
+              'El correo electrónico ya está registrado',
+            );
           }
           if (target?.includes('documentNumber')) {
-            throw new ConflictException('El número de documento ya está registrado');
+            throw new ConflictException(
+              'El número de documento ya está registrado',
+            );
           }
         }
       }
@@ -197,40 +232,35 @@ export class CustomersService {
     // Verificar si el cliente existe
     await this.findOne(id);
 
-    try {
-      // Verificar si el cliente tiene órdenes de reparación o presupuestos
-      const customerWithRelations = await this.prisma.customer.findUnique({
-        where: { id },
-        include: {
-          _count: {
-            select: {
-              repairOrders: true,
-              quotes: true,
-              sales: true,
-            },
+    // Verificar si el cliente tiene órdenes de reparación o presupuestos
+    const customerWithRelations = await this.prisma.customer.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            repairOrders: true,
+            quotes: true,
+            sales: true,
           },
         },
-      });
+      },
+    });
 
-      if (
-        customerWithRelations._count.repairOrders > 0 ||
-        customerWithRelations._count.quotes > 0 ||
-        customerWithRelations._count.sales > 0
-      ) {
-        throw new BadRequestException(
-          'No se puede eliminar el cliente porque tiene órdenes de reparación, presupuestos o ventas asociadas',
-        );
-      }
-
-      await this.prisma.customer.delete({
-        where: { id },
-      });
-
-      return { message: 'Cliente eliminado correctamente' };
-    } catch (error) {
-      // Re-lanza el error original (ver comentario en create)
-      throw error;
+    if (
+      customerWithRelations._count.repairOrders > 0 ||
+      customerWithRelations._count.quotes > 0 ||
+      customerWithRelations._count.sales > 0
+    ) {
+      throw new BadRequestException(
+        'No se puede eliminar el cliente porque tiene órdenes de reparación, presupuestos o ventas asociadas',
+      );
     }
+
+    await this.prisma.customer.delete({
+      where: { id },
+    });
+
+    return { message: 'Cliente eliminado correctamente' };
   }
 
   /**
@@ -264,7 +294,9 @@ export class CustomersService {
 
     // Aquí iría la lógica para enviar la notificación (email, SMS, etc.)
     // Por ahora solo retornamos un mensaje de éxito
-    console.log(`Notificación enviada a ${customer.name} (${customer.email || customer.phone}): ${message}`);
+    console.log(
+      `Notificación enviada a ${customer.name} (${customer.email || customer.phone}): ${message}`,
+    );
 
     return { message: 'Notificación enviada correctamente' };
   }

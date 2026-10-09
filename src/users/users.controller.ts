@@ -1,17 +1,17 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Patch, 
-  Param, 
-  Delete, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
   HttpCode,
   HttpStatus,
   Query,
   Res,
   BadRequestException,
-  ForbiddenException
+  ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { UsersService } from './users.service';
@@ -26,14 +26,14 @@ import { parsePagination } from '../common/pagination/pagination.utils';
 
 /**
  * UsersController - Controlador para la gestión de usuarios
- * 
+ *
  * Este controlador maneja todas las operaciones CRUD relacionadas con usuarios:
  * - Creación de usuarios
  * - Obtención de usuarios (individual o lista)
  * - Actualización de usuarios
  * - Desactivación de usuarios
  * - Cambio de contraseña
- * 
+ *
  * Todas las rutas están protegidas por defecto por los guards globales
  * (JwtAuthGuard + RolesGuard registrados en AppModule); @Roles define el
  * permiso requerido en cada endpoint.
@@ -77,7 +77,11 @@ export class UsersController {
     }
 
     const { skip, take } = parsePagination(page, limit);
-    const { data, total } = await this.usersService.findAll({ role, skip, take });
+    const { data, total } = await this.usersService.findAll({
+      role,
+      skip,
+      take,
+    });
     res.set('X-Total-Count', String(total));
     return data;
   }
@@ -103,7 +107,10 @@ export class UsersController {
    */
   @Patch(':id')
   @Roles(Role.ADMIN)
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+  update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
     return this.usersService.update(id, updateUserDto);
   }
 

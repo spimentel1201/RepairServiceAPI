@@ -29,7 +29,10 @@ import { Response } from 'express';
 export class PrismaExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(PrismaExceptionFilter.name);
 
-  catch(exception: Prisma.PrismaClientKnownRequestError, host: ArgumentsHost): void {
+  catch(
+    exception: Prisma.PrismaClientKnownRequestError,
+    host: ArgumentsHost,
+  ): void {
     const response = host.switchToHttp().getResponse<Response>();
     const httpException = this.toHttpException(exception);
 
@@ -41,17 +44,23 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       );
     }
 
-    response.status(httpException.getStatus()).json(httpException.getResponse());
+    response
+      .status(httpException.getStatus())
+      .json(httpException.getResponse());
   }
 
-  private toHttpException(exception: Prisma.PrismaClientKnownRequestError): HttpException {
+  private toHttpException(
+    exception: Prisma.PrismaClientKnownRequestError,
+  ): HttpException {
     switch (exception.code) {
       case 'P2002': {
         const rawTarget = exception.meta?.target;
         const target = Array.isArray(rawTarget)
           ? (rawTarget as string[]).join(', ')
           : String(rawTarget ?? 'el registro');
-        return new ConflictException(`Ya existe un registro con ese valor en: ${target}`);
+        return new ConflictException(
+          `Ya existe un registro con ese valor en: ${target}`,
+        );
       }
 
       case 'P2003':
@@ -60,14 +69,20 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         );
 
       case 'P2025':
-        return new NotFoundException('El registro que se intenta modificar o eliminar no existe');
+        return new NotFoundException(
+          'El registro que se intenta modificar o eliminar no existe',
+        );
 
       case 'P2021':
       case 'P2022':
-        return new InternalServerErrorException('Error de esquema en la base de datos');
+        return new InternalServerErrorException(
+          'Error de esquema en la base de datos',
+        );
 
       default:
-        return new InternalServerErrorException('Error interno al consultar la base de datos');
+        return new InternalServerErrorException(
+          'Error interno al consultar la base de datos',
+        );
     }
   }
 }

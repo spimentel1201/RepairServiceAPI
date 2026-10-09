@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsInt, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsUUID, Min, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { RepairOrderStatus } from '@prisma/client';
 
@@ -34,7 +45,11 @@ export class CreateRepairOrderItemDto {
   @IsOptional()
   accessories?: string[];
 
-  @ApiPropertyOptional({ description: 'Cantidad (por defecto 1)', minimum: 1, default: 1 })
+  @ApiPropertyOptional({
+    description: 'Cantidad (por defecto 1)',
+    minimum: 1,
+    default: 1,
+  })
   @IsNumber()
   @IsPositive()
   @IsOptional()
@@ -50,27 +65,35 @@ export class CreateRepairOrderItemDto {
   @IsOptional()
   price?: number;
 
-  @ApiPropertyOptional({ description: 'ID del producto relacionado (si aplica)' })
+  @ApiPropertyOptional({
+    description: 'ID del producto relacionado (si aplica)',
+  })
   @IsUUID()
   @IsOptional()
-  productId?: string;}
+  productId?: string;
+}
 
 export class CreateRepairOrderDto {
   @ApiProperty({
-    description: 'ID del cliente (obligatorio: la orden siempre pertenece a un cliente)',
+    description:
+      'ID del cliente (obligatorio: la orden siempre pertenece a un cliente)',
   })
   @IsUUID()
   @IsNotEmpty()
   customerId: string;
 
-  @ApiProperty({ description: 'ID del técnico asignado',  required: false, nullable: true })
+  @ApiProperty({
+    description: 'ID del técnico asignado',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   technicianId?: string | null;
 
-  @ApiPropertyOptional({ 
-    description: 'Estado de la orden', 
+  @ApiPropertyOptional({
+    description: 'Estado de la orden',
     enum: RepairOrderStatus,
-    default: RepairOrderStatus.RECEIVED
+    default: RepairOrderStatus.RECEIVED,
   })
   @IsEnum(RepairOrderStatus)
   @IsOptional()
@@ -86,15 +109,18 @@ export class CreateRepairOrderDto {
   @IsOptional()
   notes?: string;
 
-  @ApiPropertyOptional({ description: 'Costo inicial de revisión (puede ser 0)', minimum: 0 })
+  @ApiPropertyOptional({
+    description: 'Costo inicial de revisión (puede ser 0)',
+    minimum: 0,
+  })
   @IsNumber()
   @Min(0)
   @IsOptional()
   initialReviewCost?: number;
 
-  @ApiProperty({ 
-    description: 'Ítems de la orden de reparación', 
-    type: [CreateRepairOrderItemDto] 
+  @ApiProperty({
+    description: 'Ítems de la orden de reparación',
+    type: [CreateRepairOrderItemDto],
   })
   @IsArray()
   @ValidateNested({ each: true })

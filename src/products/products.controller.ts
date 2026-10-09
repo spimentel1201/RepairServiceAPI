@@ -1,16 +1,38 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseInterceptors, UploadedFile, Res, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+  Query,
+  UseInterceptors,
+  UploadedFile,
+  Res,
+  BadRequestException,
+} from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiBearerAuth,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { ImportProductsDto, ImportFileType } from './dto/import-products.dto';
+import { ImportFileType } from './dto/import-products.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { parsePagination } from '../common/pagination/pagination.utils';
-import * as Multer from 'multer';
 
 /**
  * Límites de la importación masiva de productos.
@@ -52,29 +74,52 @@ export class ProductsController {
   @Post()
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Crear un nuevo producto' })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'El producto ha sido creado exitosamente.',
-    type: ProductResponseDto
+    type: ProductResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
-  @ApiResponse({ status: 409, description: 'Conflicto: Ya existe un producto con ese nombre.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflicto: Ya existe un producto con ese nombre.',
+  })
   @ApiBody({ type: CreateProductDto })
-  create(@Body() createProductDto: CreateProductDto): Promise<ProductResponseDto> {
+  create(
+    @Body() createProductDto: CreateProductDto,
+  ): Promise<ProductResponseDto> {
     return this.productsService.create(createProductDto);
   }
 
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todos los productos' })
-  @ApiQuery({ name: 'category', description: 'Filtrar por categoría', required: false })
-  @ApiQuery({ name: 'active', description: 'Filtrar por estado activo/inactivo (true|false)', required: false, type: Boolean })
-  @ApiQuery({ name: 'page', description: 'Página (base 1, por defecto 1)', required: false })
-  @ApiQuery({ name: 'limit', description: 'Registros por página (por defecto 20, máx. 100)', required: false })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Retorna una página de productos. El total de registros sin paginar se expone en la cabecera X-Total-Count',
-    type: [ProductResponseDto]
+  @ApiQuery({
+    name: 'category',
+    description: 'Filtrar por categoría',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'active',
+    description: 'Filtrar por estado activo/inactivo (true|false)',
+    required: false,
+    type: Boolean,
+  })
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Retorna una página de productos. El total de registros sin paginar se expone en la cabecera X-Total-Count',
+    type: [ProductResponseDto],
   })
   async findAll(
     @Res({ passthrough: true }) res: Response,
@@ -91,7 +136,9 @@ export class ProductsController {
       } else if (active === 'false' || active === '0') {
         activeFilter = false;
       } else {
-        throw new BadRequestException(`Valor inválido para "active": ${active}`);
+        throw new BadRequestException(
+          `Valor inválido para "active": ${active}`,
+        );
       }
     }
 
@@ -109,12 +156,18 @@ export class ProductsController {
 
   @Get('search')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Buscar productos por nombre, descripción o categoría' })
-  @ApiQuery({ name: 'query', description: 'Término de búsqueda', required: true })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiOperation({
+    summary: 'Buscar productos por nombre, descripción o categoría',
+  })
+  @ApiQuery({
+    name: 'query',
+    description: 'Término de búsqueda',
+    required: true,
+  })
+  @ApiResponse({
+    status: 200,
     description: 'Retorna los productos que coinciden con la búsqueda',
-    type: [ProductResponseDto]
+    type: [ProductResponseDto],
   })
   search(@Query('query') query: string): Promise<ProductResponseDto[]> {
     return this.productsService.search(query);
@@ -123,16 +176,16 @@ export class ProductsController {
   @Get('categories')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todas las categorías de productos' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Retorna todas las categorías únicas',
     schema: {
       type: 'array',
       items: {
         type: 'string',
-        example: 'Repuestos'
-      }
-    }
+        example: 'Repuestos',
+      },
+    },
   })
   getCategories(): Promise<string[]> {
     return this.productsService.getCategories();
@@ -142,10 +195,10 @@ export class ProductsController {
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener un producto por ID' })
   @ApiParam({ name: 'id', description: 'ID del producto' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Retorna el producto',
-    type: ProductResponseDto
+    type: ProductResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Producto no encontrado.' })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<ProductResponseDto> {
@@ -157,17 +210,20 @@ export class ProductsController {
   @ApiOperation({ summary: 'Actualizar un producto' })
   @ApiParam({ name: 'id', description: 'ID del producto' })
   @ApiBody({ type: UpdateProductDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'El producto ha sido actualizado exitosamente.',
-    type: ProductResponseDto
+    type: ProductResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
   @ApiResponse({ status: 404, description: 'Producto no encontrado.' })
-  @ApiResponse({ status: 409, description: 'Conflicto: Ya existe otro producto con ese nombre.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflicto: Ya existe otro producto con ese nombre.',
+  })
   update(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() updateProductDto: UpdateProductDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateProductDto: UpdateProductDto,
   ): Promise<ProductResponseDto> {
     return this.productsService.update(id, updateProductDto);
   }
@@ -176,28 +232,31 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Actualizar el stock de un producto' })
   @ApiParam({ name: 'id', description: 'ID del producto' })
-  @ApiBody({ 
+  @ApiBody({
     schema: {
       type: 'object',
       properties: {
         quantity: {
           type: 'number',
           example: 10,
-          description: 'Cantidad a añadir (positiva) o restar (negativa)'
-        }
-      }
-    }
+          description: 'Cantidad a añadir (positiva) o restar (negativa)',
+        },
+      },
+    },
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'El stock del producto ha sido actualizado exitosamente.',
-    type: ProductResponseDto
+    type: ProductResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'No hay suficiente stock disponible.' })
+  @ApiResponse({
+    status: 400,
+    description: 'No hay suficiente stock disponible.',
+  })
   @ApiResponse({ status: 404, description: 'Producto no encontrado.' })
   updateStock(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body('quantity') quantity: number
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('quantity') quantity: number,
   ): Promise<ProductResponseDto> {
     return this.productsService.updateStock(id, quantity);
   }
@@ -206,26 +265,27 @@ export class ProductsController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar un producto' })
   @ApiParam({ name: 'id', description: 'ID del producto' })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'El producto ha sido eliminado o marcado como inactivo exitosamente.',
+  @ApiResponse({
+    status: 200,
+    description:
+      'El producto ha sido eliminado o marcado como inactivo exitosamente.',
     schema: {
       type: 'object',
       properties: {
         message: {
           type: 'string',
-          example: 'Producto eliminado correctamente'
-        }
-      }
-    }
+          example: 'Producto eliminado correctamente',
+        },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Error al eliminar el producto.' })
   @ApiResponse({ status: 404, description: 'Producto no encontrado.' })
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
     return this.productsService.remove(id);
   }
-  
-    @Post('import')
+
+  @Post('import')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Importar productos desde un archivo Excel o CSV' })
   @ApiConsumes('multipart/form-data')
@@ -236,38 +296,41 @@ export class ProductsController {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'Archivo Excel (.xlsx) o CSV (.csv)'
+          description: 'Archivo Excel (.xlsx) o CSV (.csv)',
         },
         fileType: {
           type: 'string',
           enum: Object.values(ImportFileType),
-          description: 'Tipo de archivo (excel o csv)'
-        }
-      }
-    }
+          description: 'Tipo de archivo (excel o csv)',
+        },
+      },
+    },
   })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'Los productos han sido importados exitosamente.',
     schema: {
       type: 'object',
       properties: {
         message: { type: 'string' },
         importedCount: { type: 'number' },
-        errors: { 
+        errors: {
           type: 'array',
           items: {
             type: 'object',
             properties: {
               row: { type: 'number' },
-              error: { type: 'string' }
-            }
-          }
-        }
-      }
-    }
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
   })
-  @ApiResponse({ status: 400, description: 'Formato de archivo incorrecto o datos inválidos.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Formato de archivo incorrecto o datos inválidos.',
+  })
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_IMPORT_FILE_SIZE, files: 1 },
@@ -276,28 +339,29 @@ export class ProductsController {
   )
   async importProducts(
     @UploadedFile() file: Express.Multer.File,
-    @Body('fileType') fileType: ImportFileType
+    @Body('fileType') fileType: ImportFileType,
   ) {
     return this.productsService.importProducts(file, fileType);
   }
 
   @Get('import/template')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Descargar plantilla para importación de productos' })
-  @ApiQuery({ 
-    name: 'fileType', 
-    enum: ImportFileType, 
-    description: 'Tipo de archivo de la plantilla (excel o csv)' 
+  @ApiOperation({
+    summary: 'Descargar plantilla para importación de productos',
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiQuery({
+    name: 'fileType',
+    enum: ImportFileType,
+    description: 'Tipo de archivo de la plantilla (excel o csv)',
+  })
+  @ApiResponse({
+    status: 200,
     description: 'Plantilla generada exitosamente',
   })
   downloadTemplate(
     @Query('fileType') fileType: ImportFileType,
-    @Res() res: Response
+    @Res() res: Response,
   ) {
     return this.productsService.generateTemplate(fileType, res);
   }
 }
-

@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRepairOrderDto, CreateRepairOrderItemDto } from './dto/create-repair-order.dto';
+import {
+  CreateRepairOrderDto,
+  CreateRepairOrderItemDto,
+} from './dto/create-repair-order.dto';
 import { UpdateRepairOrderDto } from './dto/update-repair-order.dto';
 import { RepairOrderResponseDto } from './dto/repair-order-response.dto';
 import { Prisma, RepairOrderStatus } from '@prisma/client';
@@ -8,7 +11,10 @@ import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
 import { Paged } from '../common/pagination/pagination.utils';
 
 /** Item de orden ya normalizado (cantidad >= 1 y precio definido) */
-type ResolvedItem = CreateRepairOrderItemDto & { quantity: number; price: number };
+type ResolvedItem = CreateRepairOrderItemDto & {
+  quantity: number;
+  price: number;
+};
 
 /**
  * Servicio para gestionar órdenes de reparación
@@ -22,24 +28,37 @@ export class RepairOrdersService {
    * - `quantity` por defecto 1 (antes podia quedar undefined y el total salia NaN)
    * - `price` tomado del catálogo (`Product.price`) cuando no viene informado
    */
-  private async resolveItems(items: CreateRepairOrderItemDto[]): Promise<ResolvedItem[]> {
-    const productIds = [...new Set(items.map(item => item.productId).filter(id => !!id))] as string[];
+  private async resolveItems(
+    items: CreateRepairOrderItemDto[],
+  ): Promise<ResolvedItem[]> {
+    const productIds = [
+      ...new Set(items.map((item) => item.productId).filter((id) => !!id)),
+    ] as string[];
     const products =
       productIds.length > 0
-        ? await this.prisma.product.findMany({ where: { id: { in: productIds } } })
+        ? await this.prisma.product.findMany({
+            where: { id: { in: productIds } },
+          })
         : [];
-    const productMap = new Map(products.map(product => [product.id, product]));
+    const productMap = new Map(
+      products.map((product) => [product.id, product]),
+    );
 
-    return items.map(item => {
-      const product = item.productId ? productMap.get(item.productId) : undefined;
+    return items.map((item) => {
+      const product = item.productId
+        ? productMap.get(item.productId)
+        : undefined;
 
       if (item.productId && !product) {
-        throw new NotFoundException(`Producto con ID ${item.productId} no encontrado`);
+        throw new NotFoundException(
+          `Producto con ID ${item.productId} no encontrado`,
+        );
       }
 
       return {
         ...item,
-        quantity: item.quantity && item.quantity > 0 ? Math.trunc(item.quantity) : 1,
+        quantity:
+          item.quantity && item.quantity > 0 ? Math.trunc(item.quantity) : 1,
         price:
           item.price !== undefined && item.price !== null
             ? item.price
@@ -55,19 +74,26 @@ export class RepairOrdersService {
    * @param createRepairOrderDto Datos para crear la orden
    * @returns La orden creada
    */
-  async create(createRepairOrderDto: CreateRepairOrderDto): Promise<RepairOrderResponseDto> {
+  async create(
+    createRepairOrderDto: CreateRepairOrderDto,
+  ): Promise<RepairOrderResponseDto> {
     // Verificar si el cliente existe
     const customer = await this.prisma.customer.findUnique({
       where: { id: createRepairOrderDto.customerId },
     });
 
     if (!customer) {
-      throw new NotFoundException(`Cliente con ID ${createRepairOrderDto.customerId} no encontrado`);
+      throw new NotFoundException(
+        `Cliente con ID ${createRepairOrderDto.customerId} no encontrado`,
+      );
     }
 
     const items = await this.resolveItems(createRepairOrderDto.items);
     const initialReviewCost = toAmount(createRepairOrderDto.initialReviewCost);
-    const itemsTotal = items.reduce((sum, item) => sum + toAmount(item.price) * item.quantity, 0);
+    const itemsTotal = items.reduce(
+      (sum, item) => sum + toAmount(item.price) * item.quantity,
+      0,
+    );
 
     const repairOrder = await this.prisma.$transaction(async (prisma) => {
       return prisma.repairOrder.create({
@@ -100,7 +126,9 @@ export class RepairOrdersService {
   async findAll(
     params: { status?: RepairOrderStatus; skip?: number; take?: number } = {},
   ): Promise<Paged<RepairOrderResponseDto>> {
-    const where: Prisma.RepairOrderWhereInput = params.status ? { status: params.status } : {};
+    const where: Prisma.RepairOrderWhereInput = params.status
+      ? { status: params.status }
+      : {};
 
     const [repairOrders, total] = await Promise.all([
       this.prisma.repairOrder.findMany({
@@ -116,21 +144,24 @@ export class RepairOrdersService {
               name: true,
               email: true,
               phone: true,
-            }
+            },
           },
           technician: {
             select: {
               id: true,
               firstName: true,
-              lastName: true
-            }
+              lastName: true,
+            },
           },
         },
       }),
       this.prisma.repairOrder.count({ where }),
     ]);
 
-    return { data: repairOrders.map(order => new RepairOrderResponseDto(order)), total };
+    return {
+      data: repairOrders.map((order) => new RepairOrderResponseDto(order)),
+      total,
+    };
   }
 
   /**
@@ -149,20 +180,22 @@ export class RepairOrdersService {
             name: true,
             email: true,
             phone: true,
-          }
+          },
         },
         technician: {
           select: {
             id: true,
             firstName: true,
-            lastName: true
-          }
+            lastName: true,
+          },
         },
       },
     });
 
     if (!repairOrder) {
-      throw new NotFoundException(`Orden de reparación con ID ${id} no encontrada`);
+      throw new NotFoundException(
+        `Orden de reparación con ID ${id} no encontrada`,
+      );
     }
 
     return new RepairOrderResponseDto(repairOrder);
@@ -189,7 +222,7 @@ export class RepairOrdersService {
       },
     });
 
-    return repairOrders.map(order => new RepairOrderResponseDto(order));
+    return repairOrders.map((order) => new RepairOrderResponseDto(order));
   }
 
   /**
@@ -197,13 +230,17 @@ export class RepairOrdersService {
    * @param technicianId ID del técnico
    * @returns Lista de órdenes del técnico
    */
-  async findByTechnician(technicianId: string): Promise<RepairOrderResponseDto[]> {
+  async findByTechnician(
+    technicianId: string,
+  ): Promise<RepairOrderResponseDto[]> {
     const technician = await this.prisma.user.findUnique({
       where: { id: technicianId },
     });
 
     if (!technician) {
-      throw new NotFoundException(`Técnico con ID ${technicianId} no encontrado`);
+      throw new NotFoundException(
+        `Técnico con ID ${technicianId} no encontrado`,
+      );
     }
 
     const repairOrders = await this.prisma.repairOrder.findMany({
@@ -213,7 +250,7 @@ export class RepairOrdersService {
       },
     });
 
-    return repairOrders.map(order => new RepairOrderResponseDto(order));
+    return repairOrders.map((order) => new RepairOrderResponseDto(order));
   }
 
   /**
@@ -222,7 +259,10 @@ export class RepairOrdersService {
    * @param updateRepairOrderDto Datos para actualizar
    * @returns La orden actualizada
    */
-  async update(id: string, updateRepairOrderDto: UpdateRepairOrderDto): Promise<RepairOrderResponseDto> {
+  async update(
+    id: string,
+    updateRepairOrderDto: UpdateRepairOrderDto,
+  ): Promise<RepairOrderResponseDto> {
     // Orden actual: verifica existencia y aporta el costo de revision vigente
     const current = await this.findOne(id);
 
@@ -233,7 +273,9 @@ export class RepairOrdersService {
       });
 
       if (!customer) {
-        throw new NotFoundException(`Cliente con ID ${updateRepairOrderDto.customerId} no encontrado`);
+        throw new NotFoundException(
+          `Cliente con ID ${updateRepairOrderDto.customerId} no encontrado`,
+        );
       }
     }
 
@@ -244,7 +286,9 @@ export class RepairOrdersService {
       });
 
       if (!technician) {
-        throw new NotFoundException(`Técnico con ID ${updateRepairOrderDto.technicianId} no encontrado`);
+        throw new NotFoundException(
+          `Técnico con ID ${updateRepairOrderDto.technicianId} no encontrado`,
+        );
       }
     }
 
@@ -263,7 +307,10 @@ export class RepairOrdersService {
         });
 
         const items = await this.resolveItems(updateRepairOrderDto.items);
-        const itemsTotal = items.reduce((sum, item) => sum + toAmount(item.price) * item.quantity, 0);
+        const itemsTotal = items.reduce(
+          (sum, item) => sum + toAmount(item.price) * item.quantity,
+          0,
+        );
 
         // Actualizar la orden con los nuevos items (total recalculado)
         return prisma.repairOrder.update({
@@ -277,9 +324,10 @@ export class RepairOrdersService {
             initialReviewCost,
             totalCost: roundToTwoDecimals(initialReviewCost + itemsTotal),
             // Si el estado cambia a COMPLETED, establecer la fecha de finalización
-            endDate: updateRepairOrderDto.status === RepairOrderStatus.COMPLETED
-              ? new Date()
-              : undefined,
+            endDate:
+              updateRepairOrderDto.status === RepairOrderStatus.COMPLETED
+                ? new Date()
+                : undefined,
             items: {
               create: items,
             },
@@ -292,7 +340,10 @@ export class RepairOrdersService {
 
       // Si no hay items nuevos, solo actualizar los datos básicos.
       // totalCost se recalcula por si cambio el costo de revision inicial.
-      const itemsTotal = current.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const itemsTotal = current.items.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0,
+      );
 
       return prisma.repairOrder.update({
         where: { id },
@@ -305,9 +356,10 @@ export class RepairOrdersService {
           initialReviewCost,
           totalCost: roundToTwoDecimals(initialReviewCost + itemsTotal),
           // Si el estado cambia a COMPLETED, establecer la fecha de finalización
-          endDate: updateRepairOrderDto.status === RepairOrderStatus.COMPLETED
-            ? new Date()
-            : undefined,
+          endDate:
+            updateRepairOrderDto.status === RepairOrderStatus.COMPLETED
+              ? new Date()
+              : undefined,
         },
         include: {
           items: true,
@@ -349,7 +401,10 @@ export class RepairOrdersService {
    * @param status Nuevo estado
    * @returns La orden actualizada
    */
-  async updateStatus(id: string, status: RepairOrderStatus): Promise<RepairOrderResponseDto> {
+  async updateStatus(
+    id: string,
+    status: RepairOrderStatus,
+  ): Promise<RepairOrderResponseDto> {
     // Verificar si la orden existe
     await this.findOne(id);
 
@@ -358,7 +413,8 @@ export class RepairOrdersService {
       data: {
         status,
         // Si el estado cambia a COMPLETED, establecer la fecha de finalización
-        endDate: status === RepairOrderStatus.COMPLETED ? new Date() : undefined,
+        endDate:
+          status === RepairOrderStatus.COMPLETED ? new Date() : undefined,
       },
       include: {
         items: true,
