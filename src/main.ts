@@ -36,6 +36,23 @@ function getCorsOrigin(): string[] | boolean {
 }
 
 /**
+ * Validacion de variables de entorno obligatorias.
+ * Sin ellas la API "arranca" pero falla en la primera peticion
+ * (Prisma o JWT); aqui fallamos rapido y con un mensaje claro.
+ */
+export function assertRequiredEnv(env: NodeJS.ProcessEnv = process.env): void {
+  const missing = ['DATABASE_URL', 'JWT_SECRET'].filter(
+    (key) => !String(env[key] ?? '').trim(),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Faltan variables de entorno obligatorias: ${missing.join(', ')}. ` +
+        'Copia .env.example a .env y completa los valores (ver README).',
+    );
+  }
+}
+
+/**
  * Configuración compartida entre el proceso local (bootstrap)
  * y el handler serverless de Vercel (export default).
  */
@@ -74,6 +91,7 @@ export function configureApp(app: INestApplication): void {
 }
 
 async function bootstrap() {
+  assertRequiredEnv();
   const app = await NestFactory.create(AppModule);
   configureApp(app);
 
@@ -98,6 +116,7 @@ let appPromise: Promise<INestApplication> | null = null;
 
 function getServerlessApp(): Promise<INestApplication> {
   if (!appPromise) {
+    assertRequiredEnv();
     appPromise = NestFactory.create(AppModule)
       .then(async (app) => {
         configureApp(app);
