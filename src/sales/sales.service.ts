@@ -2,15 +2,17 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { RepairOrdersService } from '../repair-orders/repair-orders.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { SaleResponseDto, SaleItemResponseDto } from './dto/sale-response.dto';
 import { SaleInvoiceDto, SaleInvoiceItemDto } from './dto/sale-invoice.dto';
-import { Prisma } from '@prisma/client';
+import { PaymentMethod, Prisma, QuoteStatus } from '@prisma/client';
 import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
 import { Paged } from '../common/pagination/pagination.utils';
 
@@ -18,6 +20,8 @@ export interface FindAllSalesParams {
   startDate?: Date;
   endDate?: Date;
   customerId?: string;
+  quoteId?: string;
+  repairOrderId?: string;
   skip?: number;
   take?: number;
 }
@@ -27,6 +31,7 @@ export class SalesService {
   constructor(
     private prisma: PrismaService,
     @Optional() private configService?: ConfigService,
+    @Optional() private repairOrders?: RepairOrdersService,
   ) {}
 
   /**
@@ -173,6 +178,9 @@ export class SalesService {
 
     // Preparar la respuesta
     const saleItems = sale.items.map((item) => {
+      if (!item.productId) {
+        throw new BadRequestException('Uno o más productos no existen');
+      }
       const product = productMap.get(item.productId);
       if (!product) {
         throw new BadRequestException('Uno o más productos no existen');
@@ -190,6 +198,100 @@ export class SalesService {
       userName: `${sale.user.firstName} ${sale.user.lastName}`,
       customerFullName: sale.customer ? sale.customer.name : sale.customerName,
     });
+  }
+
+  /**
+   * Factura un presupuesto aprobado: crea la venta desde sus ítems,
+   * marca el quote INVOICED y recalcula el cobro de la orden. Todo en una
+   * transacción (anti doble-cobro: `Sale.quoteId` es único).
+   *
+   * Los ítems de servicio no tocan stock (sin productId); solo los ítems con
+   * productId reservarían inventario (hoy los quotes no los traen).
+   *
+   * @param quoteId ID del presupuesto APPROVED
+   * @param paymentMethod Método de pago del cobro
+   * @param userId ID del usuario que cobra
+   * @returns La venta creada
+   */
+  async createFromQuote(
+    quoteId: string,
+    paymentMethod: PaymentMethod,
+    userId: string,
+  ): Promise<SaleResponseDto> {
+    const sale = await this.prisma.$transaction(async (prisma) => {
+      const quote = await prisma.quote.findUnique({
+        where: { id: quoteId },
+        include: { items: true },
+      });
+
+      if (!quote) {
+        throw new NotFoundException(
+          `Presupuesto con ID ${quoteId} no encontrado`,
+        );
+      }
+
+      if (quote.status !== QuoteStatus.APPROVED) {
+        throw new ConflictException(
+          `Solo un presupuesto APPROVED puede facturarse (estado actual: ${quote.status})`,
+        );
+      }
+
+      const existing = await prisma.sale.findUnique({
+        where: { quoteId },
+        select: { id: true },
+      });
+
+      if (existing) {
+        throw new ConflictException(
+          `El presupuesto ya fue facturado (venta ${existing.id})`,
+        );
+      }
+
+      if (!quote.items || quote.items.length === 0) {
+        throw new BadRequestException(
+          'El presupuesto no tiene ítems para facturar',
+        );
+      }
+
+      const created = await prisma.sale.create({
+        data: {
+          customerId: quote.customerId,
+          userId,
+          // El total es el calculado por el servidor al aprobar, no lo que
+          // envíe el cliente (aquí ni siquiera viaja un total).
+          totalAmount: quote.totalAmount,
+          paymentMethod,
+          quoteId: quote.id,
+          repairOrderId: quote.repairOrderId,
+          items: {
+            create: quote.items.map((item) => ({
+              quantity: item.quantity,
+              price: item.price,
+              description: item.description,
+            })),
+          },
+        },
+        include: {
+          items: { include: { product: true } },
+          user: true,
+          customer: true,
+        },
+      });
+
+      await prisma.quote.update({
+        where: { id: quote.id },
+        data: { status: QuoteStatus.INVOICED },
+      });
+
+      return created;
+    });
+
+    // La orden refleja el cobro (total vigente + avance a IN_PROGRESS).
+    if (sale.repairOrderId) {
+      await this.repairOrders?.recalcBilling(sale.repairOrderId);
+    }
+
+    return this.toResponseDto(sale);
   }
 
   /**
@@ -218,6 +320,14 @@ export class SalesService {
       where.customerId = params.customerId;
     }
 
+    if (params.quoteId) {
+      where.quoteId = params.quoteId;
+    }
+
+    if (params.repairOrderId) {
+      where.repairOrderId = params.repairOrderId;
+    }
+
     const [sales, total] = await Promise.all([
       this.prisma.sale.findMany({
         where,
@@ -239,25 +349,7 @@ export class SalesService {
       this.prisma.sale.count({ where }),
     ]);
 
-    const data = sales.map((sale) => {
-      const saleItems = sale.items.map(
-        (item) =>
-          new SaleItemResponseDto({
-            ...item,
-            productName: item.product.name,
-            productDescription: item.product.description,
-          }),
-      );
-
-      return new SaleResponseDto({
-        ...sale,
-        items: saleItems,
-        userName: `${sale.user.firstName} ${sale.user.lastName}`,
-        customerFullName: sale.customer
-          ? sale.customer.name
-          : sale.customerName,
-      });
-    });
+    const data = sales.map((sale) => this.toResponseDto(sale));
 
     return { data, total };
   }
@@ -285,12 +377,31 @@ export class SalesService {
       throw new NotFoundException(`Venta con ID ${id} no encontrada`);
     }
 
+    return this.toResponseDto(sale);
+  }
+
+  /**
+   * Mapea una venta con sus relaciones al DTO de respuesta.
+   * Soporta ítems de servicio (sin producto): el nombre/descripción sale del
+   * snapshot `description` guardado al facturar el presupuesto.
+   */
+  private toResponseDto(
+    sale: Prisma.SaleGetPayload<{
+      include: {
+        items: { include: { product: true } };
+        user: true;
+        customer: true;
+      };
+    }>,
+  ): SaleResponseDto {
     const saleItems = sale.items.map(
       (item) =>
         new SaleItemResponseDto({
           ...item,
-          productName: item.product.name,
-          productDescription: item.product.description,
+          productName:
+            item.product?.name ?? item.description ?? 'Ítem de servicio',
+          productDescription:
+            item.product?.description ?? item.description,
         }),
     );
 
@@ -342,8 +453,10 @@ export class SalesService {
     const invoiceItems = sale.items.map(
       (item) =>
         new SaleInvoiceItemDto({
-          productName: item.product.name,
-          productDescription: item.product.description,
+          productName:
+            item.product?.name ?? item.description ?? 'Ítem de servicio',
+          productDescription:
+            item.product?.description ?? item.description,
           quantity: item.quantity,
           unitPrice: toAmount(item.price),
           totalPrice: roundToTwoDecimals(toAmount(item.price) * item.quantity),
@@ -422,8 +535,10 @@ export class SalesService {
       (item) =>
         new SaleItemResponseDto({
           ...item,
-          productName: item.product.name,
-          productDescription: item.product.description,
+          productName:
+            item.product?.name ?? item.description ?? 'Ítem de servicio',
+          productDescription:
+            item.product?.description ?? item.description,
         }),
     );
 
@@ -448,8 +563,10 @@ export class SalesService {
 
     // Eliminar la venta y restaurar el stock en una transacción
     await this.prisma.$transaction(async (prisma) => {
-      // Restaurar el stock de los productos
+      // Restaurar el stock de los productos (los ítems de servicio, sin
+      // productId, nunca movieron inventario y se omiten).
       for (const item of sale.items) {
+        if (!item.productId) continue;
         await prisma.product.update({
           where: { id: item.productId },
           data: {

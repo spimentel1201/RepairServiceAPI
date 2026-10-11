@@ -11,9 +11,13 @@ import {
   Res,
 } from '@nestjs/common';
 import { QuotesService } from './quotes.service';
+import { SalesService } from '../sales/sales.service';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
+import { ConvertQuoteToSaleDto } from '../sales/dto/convert-quote.dto';
+import { SaleResponseDto } from '../sales/dto/sale-response.dto';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { QuoteStatus } from '@prisma/client';
 import {
   ApiTags,
@@ -33,7 +37,10 @@ import { Role } from '@prisma/client';
 @ApiBearerAuth()
 @Controller('quotes')
 export class QuotesController {
-  constructor(private readonly quotesService: QuotesService) {}
+  constructor(
+    private readonly quotesService: QuotesService,
+    private readonly salesService: SalesService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMIN)
@@ -177,6 +184,36 @@ export class QuotesController {
     );
     res.set('X-Total-Count', String(total));
     return data;
+  }
+
+  @Post(':id/convert-to-sale')
+  @Roles(Role.ADMIN)
+  @ApiOperation({
+    summary: 'Facturar un presupuesto aprobado (crea la venta y marca INVOICED)',
+  })
+  @ApiParam({ name: 'id', description: 'ID del presupuesto APPROVED' })
+  @ApiBody({ type: ConvertQuoteToSaleDto })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Venta creada desde el presupuesto. El quote pasa a INVOICED y la orden recalcula su total.',
+    type: SaleResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Presupuesto no encontrado.',
+  })
+  @ApiResponse({
+    status: 409,
+    description:
+      'El presupuesto no está APPROVED o ya fue facturado (anti doble-cobro).',
+  })
+  convertToSale(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ConvertQuoteToSaleDto,
+    @CurrentUser() user: { id: string },
+  ): Promise<SaleResponseDto> {
+    return this.salesService.createFromQuote(id, dto.paymentMethod, user.id);
   }
 
   @Patch(':id')

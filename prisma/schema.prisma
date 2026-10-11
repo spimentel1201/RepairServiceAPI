@@ -97,6 +97,7 @@ model RepairOrder {
   technician  User?               @relation(fields: [technicianId], references: [id])
   items       RepairOrderItem[]
   quotes      Quote[]
+  sales       Sale[]
 
   @@index([status])
   @@index([createdAt])
@@ -150,6 +151,7 @@ model Quote {
   customer      Customer    @relation(fields: [customerId], references: [id])
   technician    User        @relation(fields: [technicianId], references: [id])
   items         QuoteItem[]
+  sale          Sale?
 
   @@index([status])
   @@index([repairOrderId])
@@ -162,6 +164,7 @@ enum QuoteStatus {
   APPROVED
   REJECTED
   EXPIRED
+  INVOICED
 }
 
 model QuoteItem {
@@ -194,29 +197,41 @@ model Sale {
   customerName  String?       // For non-registered customers
   totalAmount   Decimal       @db.Decimal(10, 2)
   paymentMethod PaymentMethod
+  // Cobro de presupuesto: una venta nace de un quote APPROVED (1:1).
+  quoteId       String?       @unique
+  // Orden que origina el cobro (trazabilidad; varias ventas pueden apuntar
+  // a la misma orden en el futuro con abonos parciales).
+  repairOrderId String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   customer      Customer?     @relation(fields: [customerId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
+  quote         Quote?        @relation(fields: [quoteId], references: [id])
+  repairOrder   RepairOrder?  @relation(fields: [repairOrderId], references: [id])
   items         SaleItem[]
 
   @@index([createdAt])
   @@index([customerId])
   @@index([userId])
+  @@index([repairOrderId])
 }
 
 model SaleItem {
   id        String   @id @default(uuid())
   saleId    String
-  productId String
+  // Nullable: los ítems facturados desde un presupuesto son mano de
+  // obra/servicios (snapshot en `description`), no necesariamente catálogo.
+  // Solo los ítems con productId mueven stock.
+  productId String?
   quantity  Int
   price     Decimal  @db.Decimal(10, 2)
+  description String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   sale      Sale     @relation(fields: [saleId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id])
 
   @@index([saleId])
   @@index([productId])

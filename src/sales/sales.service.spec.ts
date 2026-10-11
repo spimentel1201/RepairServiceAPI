@@ -1,5 +1,9 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { PaymentMethod } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PaymentMethod, QuoteStatus } from '@prisma/client';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -218,6 +222,96 @@ describe('SalesService', () => {
       expect(invoice.subtotal).toBe(100);
       expect(invoice.tax).toBe(10);
       expect(invoice.totalAmount).toBe(110);
+    });
+  });
+
+  describe('createFromQuote', () => {
+    const approvedQuote = {
+      id: 'q-1',
+      status: QuoteStatus.APPROVED,
+      customerId: 'c-1',
+      repairOrderId: 'ro-1',
+      totalAmount: 250,
+      items: [
+        { id: 'qi-1', quantity: 1, price: 200, description: 'Mano de obra' },
+        { id: 'qi-2', quantity: 1, price: 50, description: 'Repuesto' },
+      ],
+    };
+
+    function mockQuoteTx(quote: any, existingSale: any = null) {
+      const qtx = {
+        quote: {
+          findUnique: jest.fn().mockResolvedValue(quote),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        sale: {
+          findUnique: jest.fn().mockResolvedValue(existingSale),
+          create: jest.fn(async (args: any) => ({
+            id: 's-1',
+            ...args.data,
+            items: args.data.items.create.map((it: any, i: number) => ({
+              id: `si-${i}`,
+              saleId: 's-1',
+              productId: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              ...it,
+            })),
+            user: { firstName: 'A', lastName: 'B' },
+            customer: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })),
+        },
+      };
+      prisma.$transaction = jest.fn(async (fn: any) => fn(qtx));
+      return qtx;
+    }
+
+    it('factura un APPROVED: crea venta, marca INVOICED y enlaza quote/orden', async () => {
+      const qtx = mockQuoteTx(approvedQuote);
+      const result = await service.createFromQuote(
+        'q-1',
+        PaymentMethod.YAPE,
+        'u-1',
+      );
+
+      expect(qtx.sale.create).toHaveBeenCalled();
+      const data = qtx.sale.create.mock.calls[0][0].data;
+      expect(data.quoteId).toBe('q-1');
+      expect(data.repairOrderId).toBe('ro-1');
+      expect(data.totalAmount).toBe(250);
+      expect(data.paymentMethod).toBe(PaymentMethod.YAPE);
+      expect(data.items.create).toHaveLength(2);
+      expect(qtx.quote.update).toHaveBeenCalledWith({
+        where: { id: 'q-1' },
+        data: { status: QuoteStatus.INVOICED },
+      });
+      expect(result.quoteId).toBe('q-1');
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].productName).toBe('Mano de obra');
+    });
+
+    it('404 si el presupuesto no existe', async () => {
+      mockQuoteTx(null);
+      await expect(
+        service.createFromQuote('fantasma', PaymentMethod.CASH, 'u-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('409 si no está APPROVED', async () => {
+      mockQuoteTx({ ...approvedQuote, status: QuoteStatus.PENDING });
+      await expect(
+        service.createFromQuote('q-1', PaymentMethod.CASH, 'u-1'),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('409 anti doble-cobro si ya existe venta', async () => {
+      mockQuoteTx(approvedQuote, { id: 's-vieja' });
+      await expect(
+        service.createFromQuote('q-1', PaymentMethod.CASH, 'u-1'),
+      ).rejects.toThrow(/ya fue facturado/);
+      expect(prisma.$transaction).toHaveBeenCalled();
     });
   });
 });

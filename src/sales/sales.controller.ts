@@ -81,6 +81,16 @@ export class SalesController {
     required: false,
   })
   @ApiQuery({
+    name: 'quoteId',
+    description: 'Filtra la venta originada por un presupuesto',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'repairOrderId',
+    description: 'Filtra las ventas de una orden de reparación',
+    required: false,
+  })
+  @ApiQuery({
     name: 'page',
     description: 'Página (base 1, por defecto 1)',
     required: false,
@@ -101,6 +111,8 @@ export class SalesController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('customerId') customerId?: string,
+    @Query('quoteId') quoteId?: string,
+    @Query('repairOrderId') repairOrderId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ): Promise<SaleResponseDto[]> {
@@ -112,6 +124,8 @@ export class SalesController {
       startDate: startDateTime,
       endDate: endDateTime,
       customerId,
+      quoteId,
+      repairOrderId,
       skip,
       take,
     });

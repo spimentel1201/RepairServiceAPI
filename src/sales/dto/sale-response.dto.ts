@@ -9,12 +9,11 @@ export class SaleItemResponseDto {
   @ApiProperty()
   saleId: string;
 
-  @ApiProperty()
-  productId: string;
+  @ApiProperty({ nullable: true })
+  productId?: string | null;
 
   @ApiProperty()
   quantity: number;
-
   @ApiProperty()
   price: number;
 
@@ -31,6 +30,10 @@ export class SaleItemResponseDto {
   @ApiPropertyOptional()
   productDescription?: string | null;
 
+  @ApiPropertyOptional({
+    description: 'Snapshot del ítem de servicio (presupuesto facturado)',
+  })
+  description?: string | null;
 
   constructor(partial: Partial<SaleItemResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
@@ -57,6 +60,16 @@ export class SaleResponseDto {
 
   @ApiProperty({ enum: PaymentMethod })
   paymentMethod: PaymentMethod;
+
+  @ApiPropertyOptional({
+    description: 'Presupuesto que originó la venta (cobro de quote)',
+  })
+  quoteId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Orden de reparación que origina el cobro',
+  })
+  repairOrderId?: string | null;
 
   @ApiProperty()
   createdAt: Date;

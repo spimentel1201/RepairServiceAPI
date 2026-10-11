@@ -7,7 +7,7 @@ export class SaleInvoiceItemDto {
   productName: string;
 
   @ApiPropertyOptional()
-  productDescription?: string;
+  productDescription?: string | null;
 
   @ApiProperty()
   quantity: number;

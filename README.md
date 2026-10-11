@@ -71,8 +71,10 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 | `GET/POST /repair-orders` · `GET /repair-orders/customer/:id` · `GET /repair-orders/technician/:id` | Órdenes de reparación | ADMIN/TECH |
 | `PATCH /repair-orders/:id/status` · `DELETE /repair-orders/:id` | Estados y borrado | ADMIN |
 | `GET/POST /quotes` · `GET /quotes/repair-order/:id` · `GET /quotes/customer/:id` | Cotizaciones (crear: ADMIN) | ADMIN/TECH |
+| `POST /quotes/:id/convert-to-sale` | Factura un APPROVED: crea la venta, marca INVOICED, sincroniza la orden | ADMIN |
 | `PATCH /quotes/:id/status` · `POST /quotes/:id/send-email` · `GET /quotes/:id/whatsapp-link` | Flujo comercial | ADMIN |
 | `GET/POST /sales` · `GET /sales/:id` · `GET /sales/:id/invoice` | Ventas e factura (IGV 18%) | ADMIN/TECH |
+| `GET /sales?quoteId=` · `GET /sales?repairOrderId=` | Ventas de un presupuesto / orden | ADMIN/TECH |
 | `PATCH /sales/:id` · `DELETE /sales/:id` | Gestión de ventas | ADMIN |
 | `GET/POST /users` · `PATCH/DELETE /users/:id` · `POST /users/:id/change-password` | Usuarios | ADMIN |
 
