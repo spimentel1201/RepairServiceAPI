@@ -46,6 +46,7 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 | `DATABASE_URL` | ✅ | Conexión a PostgreSQL (con `sslmode=require` en la nube) | — |
 | `JWT_SECRET` | ✅ | Secreto de firma del JWT | — |
 | `JWT_EXPIRATION` | | Duración del token | `1d` |
+| `IGV_RATE` | | Tasa IGV para `GET /sales/:id/invoice` (0–1, excluye 1) | `0.18` |
 | `PORT` | | Puerto HTTP (proceso local) | `3000` |
 | `NODE_ENV` | | `production` silencia los logs de queries de Prisma | — |
 | `REGISTRATION_ENABLED` | | Habilita `POST /auth/register` | `true` |

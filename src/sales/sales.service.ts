@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
@@ -22,7 +24,27 @@ export interface FindAllSalesParams {
 
 @Injectable()
 export class SalesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private configService?: ConfigService,
+  ) {}
+
+  /**
+   * Tasa IGV configurable vía `IGV_RATE` (defecto 0.18).
+   * Rango válido [0, 1). Valor inválido → fallback 0.18.
+   */
+  getIgvRate(): number {
+    const DEFAULT_IGV = 0.18;
+    const raw = this.configService?.get<string>('IGV_RATE');
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return DEFAULT_IGV;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n >= 1) {
+      return DEFAULT_IGV;
+    }
+    return n;
+  }
 
   /**
    * Crea una nueva venta
@@ -288,9 +310,10 @@ export class SalesService {
       throw new NotFoundException(`Venta con ID ${id} no encontrada`);
     }
 
-    // Calcular subtotal y impuestos (18% IGV)
+    // Calcular subtotal e impuestos con tasa IGV configurable
+    const rate = this.getIgvRate();
     const total = toAmount(sale.totalAmount);
-    const subtotal = roundToTwoDecimals(total / 1.18);
+    const subtotal = roundToTwoDecimals(total / (1 + rate));
     const tax = roundToTwoDecimals(total - subtotal);
 
     // Generar número de factura (formato: INV-YYYYMMDD-ID)

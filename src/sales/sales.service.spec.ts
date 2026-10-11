@@ -175,4 +175,49 @@ describe('SalesService', () => {
       'Cliente no registrado',
     );
   });
+
+  describe('getIgvRate', () => {
+    function serviceWithIgv(raw?: string) {
+      const config = { get: jest.fn().mockReturnValue(raw) };
+      return new SalesService(
+        prisma as unknown as PrismaService,
+        config as any,
+      );
+    }
+
+    it('defecto 0.18 sin config ni variable', () => {
+      expect(service.getIgvRate()).toBe(0.18);
+      expect(serviceWithIgv(undefined).getIgvRate()).toBe(0.18);
+      expect(serviceWithIgv('').getIgvRate()).toBe(0.18);
+    });
+
+    it('respeta IGV_RATE válido', () => {
+      expect(serviceWithIgv('0.10').getIgvRate()).toBe(0.1);
+      expect(serviceWithIgv('0').getIgvRate()).toBe(0);
+    });
+
+    it('fallback 0.18 con valor inválido', () => {
+      expect(serviceWithIgv('-1').getIgvRate()).toBe(0.18);
+      expect(serviceWithIgv('1').getIgvRate()).toBe(0.18);
+      expect(serviceWithIgv('abc').getIgvRate()).toBe(0.18);
+    });
+
+    it('generateInvoice usa la tasa configurada', async () => {
+      const igvService = serviceWithIgv('0.10');
+      prisma.sale.findUnique.mockResolvedValue({
+        id: 'sale-12345678',
+        totalAmount: 110,
+        createdAt: new Date('2026-01-02'),
+        customerName: 'X',
+        paymentMethod: PaymentMethod.CASH,
+        user: { firstName: 'A', lastName: 'B' },
+        customer: null,
+        items: [],
+      });
+      const invoice = await igvService.generateInvoice('sale-12345678');
+      expect(invoice.subtotal).toBe(100);
+      expect(invoice.tax).toBe(10);
+      expect(invoice.totalAmount).toBe(110);
+    });
+  });
 });
