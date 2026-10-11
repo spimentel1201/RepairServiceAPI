@@ -6,7 +6,7 @@ import {
 } from './dto/create-repair-order.dto';
 import { UpdateRepairOrderDto } from './dto/update-repair-order.dto';
 import { RepairOrderResponseDto } from './dto/repair-order-response.dto';
-import { Prisma, RepairOrderStatus } from '@prisma/client';
+import { Prisma, QuoteStatus, RepairOrderStatus } from '@prisma/client';
 import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
 import { Paged } from '../common/pagination/pagination.utils';
 
@@ -189,6 +189,12 @@ export class RepairOrdersService {
             lastName: true,
           },
         },
+        quotes: {
+          select: { status: true, totalAmount: true },
+        },
+        sales: {
+          select: { totalAmount: true },
+        },
       },
     });
 
@@ -198,7 +204,26 @@ export class RepairOrdersService {
       );
     }
 
-    return new RepairOrderResponseDto(repairOrder);
+    const billing = {
+      billedTotal: roundToTwoDecimals(
+        repairOrder.sales.reduce((sum, s) => sum + toAmount(s.totalAmount), 0),
+      ),
+      salesCount: repairOrder.sales.length,
+      billableQuotes: repairOrder.quotes.filter(
+        (q) =>
+          q.status === QuoteStatus.APPROVED ||
+          q.status === QuoteStatus.INVOICED,
+      ).length,
+      pendingQuotes: repairOrder.quotes.filter(
+        (q) => q.status === QuoteStatus.PENDING,
+      ).length,
+    };
+
+    // `quotes`/`sales` crudos no salen en la respuesta: solo el resumen.
+    const { quotes: _quotes, sales: _sales, ...order } = repairOrder;
+    void _quotes;
+    void _sales;
+    return new RepairOrderResponseDto({ ...order, billing });
   }
 
   /**
@@ -277,6 +302,56 @@ export class RepairOrdersService {
       data: repairOrders.map((order) => new RepairOrderResponseDto(order)),
       total,
     };
+  }
+
+  /**
+   * Recalcula el cobro de una orden desde sus presupuestos vigentes.
+   *
+   * `totalCost` = Σ presupuestos APPROVED + INVOICED (recomputado, nunca
+   * acumulado: re-aprobar no duplica). Si hay al menos uno vigente y la orden
+   * sigue en RECEIVED/DIAGNOSED, avanza a IN_PROGRESS.
+   *
+   * @param orderId ID de la orden
+   * @param db Cliente Prisma o transacción en curso
+   */
+  async recalcBilling(
+    orderId: string,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<void> {
+    const order = await db.repairOrder.findUnique({
+      where: { id: orderId },
+      select: { id: true, status: true },
+    });
+
+    if (!order) {
+      throw new NotFoundException(
+        `Orden de reparación con ID ${orderId} no encontrada`,
+      );
+    }
+
+    const billable = await db.quote.findMany({
+      where: {
+        repairOrderId: orderId,
+        status: { in: [QuoteStatus.APPROVED, QuoteStatus.INVOICED] },
+      },
+      select: { totalAmount: true },
+    });
+
+    const data: Prisma.RepairOrderUpdateInput = {
+      totalCost: roundToTwoDecimals(
+        billable.reduce((sum, q) => sum + toAmount(q.totalAmount), 0),
+      ),
+    };
+
+    if (
+      billable.length > 0 &&
+      (order.status === RepairOrderStatus.RECEIVED ||
+        order.status === RepairOrderStatus.DIAGNOSED)
+    ) {
+      data.status = RepairOrderStatus.IN_PROGRESS;
+    }
+
+    await db.repairOrder.update({ where: { id: orderId }, data });
   }
 
   /**

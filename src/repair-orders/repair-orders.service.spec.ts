@@ -1,4 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
+import { QuoteStatus, RepairOrderStatus } from '@prisma/client';
 import { RepairOrdersService } from './repair-orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -75,5 +76,58 @@ describe('RepairOrdersService (totales y normalizacion de items)', () => {
   it('devuelve 404 si un producto referenciado no existe', async () => {
     prisma.product.findMany.mockResolvedValue([]);
     await expect(service.create(baseDto())).rejects.toThrow(NotFoundException);
+  });
+
+  describe('recalcBilling', () => {
+    beforeEach(() => {
+      prisma.repairOrder = {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'ro-1',
+          status: RepairOrderStatus.RECEIVED,
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      };
+      prisma.quote = {
+        findMany: jest.fn().mockResolvedValue([
+          { totalAmount: 100 },
+          { totalAmount: 50.5 },
+        ]),
+      };
+    });
+
+    it('suma APPROVED+INVOICED y avanza RECEIVED → IN_PROGRESS', async () => {
+      await service.recalcBilling('ro-1');
+      expect(prisma.quote.findMany).toHaveBeenCalledWith({
+        where: {
+          repairOrderId: 'ro-1',
+          status: { in: [QuoteStatus.APPROVED, QuoteStatus.INVOICED] },
+        },
+        select: { totalAmount: true },
+      });
+      expect(prisma.repairOrder.update).toHaveBeenCalledWith({
+        where: { id: 'ro-1' },
+        data: { totalCost: 150.5, status: RepairOrderStatus.IN_PROGRESS },
+      });
+    });
+
+    it('no avanza una orden ya COMPLETED y deja total en 0 sin vigentes', async () => {
+      prisma.repairOrder.findUnique.mockResolvedValue({
+        id: 'ro-1',
+        status: RepairOrderStatus.COMPLETED,
+      });
+      prisma.quote.findMany.mockResolvedValue([]);
+      await service.recalcBilling('ro-1');
+      expect(prisma.repairOrder.update).toHaveBeenCalledWith({
+        where: { id: 'ro-1' },
+        data: { totalCost: 0 },
+      });
+    });
+
+    it('404 si la orden no existe', async () => {
+      prisma.repairOrder.findUnique.mockResolvedValue(null);
+      await expect(service.recalcBilling('fantasma')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 });

@@ -2,8 +2,10 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RepairOrdersService } from '../repair-orders/repair-orders.service';
 import { CreateQuoteDto, CreateQuoteItemDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
@@ -13,7 +15,32 @@ import { Paged } from '../common/pagination/pagination.utils';
 
 @Injectable()
 export class QuotesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private repairOrders: RepairOrdersService,
+  ) {}
+
+  /**
+   * Transiciones de estado permitidas. INVOICED solo lo pone el cobro
+   * (`convert-to-sale`); una vez facturado el documento queda congelado.
+   */
+  private static readonly ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
+    [QuoteStatus.PENDING]: [QuoteStatus.APPROVED, QuoteStatus.REJECTED, QuoteStatus.EXPIRED],
+    [QuoteStatus.APPROVED]: [QuoteStatus.REJECTED, QuoteStatus.EXPIRED],
+    [QuoteStatus.REJECTED]: [QuoteStatus.PENDING],
+    [QuoteStatus.EXPIRED]: [QuoteStatus.PENDING],
+    [QuoteStatus.INVOICED]: [],
+  };
+
+  private assertTransition(from: QuoteStatus, to: QuoteStatus): void {
+    if (from === to) return;
+    const allowed = QuotesService.ALLOWED_TRANSITIONS[from] ?? [];
+    if (!allowed.includes(to)) {
+      throw new ConflictException(
+        `Transición de presupuesto no permitida: ${from} → ${to}`,
+      );
+    }
+  }
 
   /**
    * El total de un presupuesto siempre lo calcula el servidor a partir de sus
@@ -39,6 +66,13 @@ export class QuotesService {
     if (!createQuoteDto.items || createQuoteDto.items.length === 0) {
       throw new BadRequestException(
         'El presupuesto debe tener al menos un ítem',
+      );
+    }
+
+    // INVOICED solo lo pone el cobro (convert-to-sale), nunca la creación.
+    if (createQuoteDto.status === QuoteStatus.INVOICED) {
+      throw new BadRequestException(
+        'Un presupuesto no puede crearse como INVOICED: usa convert-to-sale',
       );
     }
 
@@ -100,6 +134,11 @@ export class QuotesService {
 
       return newQuote;
     });
+
+    // Si nace aprobado, la orden refleja el cobro desde el inicio.
+    if (quote.status === QuoteStatus.APPROVED) {
+      await this.repairOrders.recalcBilling(quote.repairOrderId);
+    }
 
     return new QuoteResponseDto(quote);
   }
@@ -250,7 +289,21 @@ export class QuotesService {
     updateQuoteDto: UpdateQuoteDto,
   ): Promise<QuoteResponseDto> {
     // Verificar si el presupuesto existe
-    await this.findOne(id);
+    const current = await this.prisma.quote.findUnique({ where: { id } });
+    if (!current) {
+      throw new NotFoundException(`Presupuesto con ID ${id} no encontrado`);
+    }
+
+    // Documento facturado = congelado (se corrige con nota, no editando).
+    if (current.status === QuoteStatus.INVOICED) {
+      throw new ConflictException(
+        'Un presupuesto INVOICED no puede editarse porque ya generó una venta',
+      );
+    }
+
+    if (updateQuoteDto.status) {
+      this.assertTransition(current.status, updateQuoteDto.status);
+    }
 
     // Verificar si la orden de reparación existe (si se proporciona)
     if (updateQuoteDto.repairOrderId) {
@@ -339,6 +392,12 @@ export class QuotesService {
       });
     });
 
+    // El cobro de la orden depende del total vigente: cualquier cambio de
+    // estado o de ítems lo recalcula (recompute idempotente, sin duplicar).
+    if (updateQuoteDto.status || updateQuoteDto.items?.length) {
+      await this.repairOrders.recalcBilling(updatedQuote.repairOrderId);
+    }
+
     return new QuoteResponseDto(updatedQuote);
   }
 
@@ -353,7 +412,12 @@ export class QuotesService {
     status: QuoteStatus,
   ): Promise<QuoteResponseDto> {
     // Verificar si el presupuesto existe
-    await this.findOne(id);
+    const current = await this.prisma.quote.findUnique({ where: { id } });
+    if (!current) {
+      throw new NotFoundException(`Presupuesto con ID ${id} no encontrado`);
+    }
+
+    this.assertTransition(current.status, status);
 
     const updatedQuote = await this.prisma.quote.update({
       where: { id },
@@ -362,6 +426,8 @@ export class QuotesService {
         items: true,
       },
     });
+
+    await this.repairOrders.recalcBilling(updatedQuote.repairOrderId);
 
     return new QuoteResponseDto(updatedQuote);
   }
@@ -373,7 +439,13 @@ export class QuotesService {
    */
   async remove(id: string): Promise<{ message: string }> {
     // Verificar si el presupuesto existe
-    await this.findOne(id);
+    const current = await this.findOne(id);
+
+    if (current.status === QuoteStatus.INVOICED) {
+      throw new ConflictException(
+        'Un presupuesto INVOICED no puede eliminarse porque ya generó una venta',
+      );
+    }
 
     await this.prisma.$transaction(async (prisma) => {
       // Eliminar los ítems del presupuesto
@@ -386,6 +458,9 @@ export class QuotesService {
         where: { id },
       });
     });
+
+    // El borrado puede bajar el total vigente de la orden.
+    await this.repairOrders.recalcBilling(current.repairOrderId);
 
     return { message: 'Presupuesto eliminado correctamente' };
   }

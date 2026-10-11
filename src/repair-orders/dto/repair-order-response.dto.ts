@@ -53,8 +53,26 @@ export class RepairOrderItemResponseDto {
   }
 }
 
-export class RepairOrderResponseDto {
-  @ApiProperty({ description: 'ID de la orden' })
+export class RepairOrderBillingDto {
+  @ApiProperty({ description: 'Total cobrado en ventas vinculadas' })
+  billedTotal: number;
+
+  @ApiProperty({ description: 'Cantidad de ventas vinculadas' })
+  salesCount: number;
+
+  @ApiProperty({ description: 'Presupuestos vigentes (APPROVED + INVOICED)' })
+  billableQuotes: number;
+
+  @ApiProperty({ description: 'Presupuestos pendientes de decisión' })
+  pendingQuotes: number;
+
+  constructor(partial: Partial<RepairOrderBillingDto>) {
+    Object.assign(this, partial);
+    this.billedTotal = toAmount(this.billedTotal);
+  }
+}
+
+export class RepairOrderResponseDto {  @ApiProperty({ description: 'ID de la orden' })
   id: string;
 
   @ApiProperty({ description: 'ID del cliente' })
@@ -99,6 +117,12 @@ export class RepairOrderResponseDto {
   })
   items: RepairOrderItemResponseDto[];
 
+  @ApiPropertyOptional({
+    description: 'Resumen de cobro (solo en detalle por ID)',
+    type: RepairOrderBillingDto,
+  })
+  billing?: RepairOrderBillingDto;
+
   constructor(
     partial: Partial<RepairOrderResponseDto> | Record<string, unknown>,
   ) {
@@ -108,5 +132,8 @@ export class RepairOrderResponseDto {
     this.items = (Array.isArray(this.items) ? this.items : []).map(
       (item) => new RepairOrderItemResponseDto(item),
     );
+    if (this.billing) {
+      this.billing = new RepairOrderBillingDto(this.billing);
+    }
   }
 }
