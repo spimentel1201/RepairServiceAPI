@@ -76,6 +76,8 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 | `GET/POST /users` · `PATCH/DELETE /users/:id` · `POST /users/:id/change-password` | Usuarios | ADMIN |
 
 Todos los listados aceptan `?page&limit` y responden con la cabecera `X-Total-Count`.
+Esto incluye los scoped: `/quotes/customer/:id`, `/quotes/repair-order/:id`,
+`/repair-orders/customer/:id` y `/repair-orders/technician/:id`.
 
 ## Tests
 

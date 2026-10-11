@@ -202,11 +202,15 @@ export class RepairOrdersService {
   }
 
   /**
-   * Obtiene todas las órdenes de un cliente
+   * Obtiene las órdenes de un cliente (paginado)
    * @param customerId ID del cliente
-   * @returns Lista de órdenes del cliente
+   * @param params Paginación opcional { skip, take }
+   * @returns Página + total (total viaja en `X-Total-Count`)
    */
-  async findByCustomer(customerId: string): Promise<RepairOrderResponseDto[]> {
+  async findByCustomer(
+    customerId: string,
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<RepairOrderResponseDto>> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
     });
@@ -215,24 +219,36 @@ export class RepairOrdersService {
       throw new NotFoundException(`Cliente con ID ${customerId} no encontrado`);
     }
 
-    const repairOrders = await this.prisma.repairOrder.findMany({
-      where: { customerId },
-      include: {
-        items: true,
-      },
-    });
+    const where = { customerId };
+    const [repairOrders, total] = await Promise.all([
+      this.prisma.repairOrder.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+        },
+      }),
+      this.prisma.repairOrder.count({ where }),
+    ]);
 
-    return repairOrders.map((order) => new RepairOrderResponseDto(order));
+    return {
+      data: repairOrders.map((order) => new RepairOrderResponseDto(order)),
+      total,
+    };
   }
 
   /**
-   * Obtiene todas las órdenes asignadas a un técnico
+   * Obtiene las órdenes asignadas a un técnico (paginado)
    * @param technicianId ID del técnico
-   * @returns Lista de órdenes del técnico
+   * @param params Paginación opcional { skip, take }
+   * @returns Página + total (total viaja en `X-Total-Count`)
    */
   async findByTechnician(
     technicianId: string,
-  ): Promise<RepairOrderResponseDto[]> {
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<RepairOrderResponseDto>> {
     const technician = await this.prisma.user.findUnique({
       where: { id: technicianId },
     });
@@ -243,14 +259,24 @@ export class RepairOrdersService {
       );
     }
 
-    const repairOrders = await this.prisma.repairOrder.findMany({
-      where: { technicianId },
-      include: {
-        items: true,
-      },
-    });
+    const where = { technicianId };
+    const [repairOrders, total] = await Promise.all([
+      this.prisma.repairOrder.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+        },
+      }),
+      this.prisma.repairOrder.count({ where }),
+    ]);
 
-    return repairOrders.map((order) => new RepairOrderResponseDto(order));
+    return {
+      data: repairOrders.map((order) => new RepairOrderResponseDto(order)),
+      total,
+    };
   }
 
   /**

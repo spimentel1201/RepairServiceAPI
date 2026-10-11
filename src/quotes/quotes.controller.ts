@@ -100,41 +100,83 @@ export class QuotesController {
   @Get('repair-order/:repairOrderId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({
-    summary: 'Obtener todos los presupuestos de una orden de reparación',
+    summary: 'Obtener los presupuestos de una orden de reparación (paginado)',
   })
   @ApiParam({
     name: 'repairOrderId',
     description: 'ID de la orden de reparación',
   })
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
   @ApiResponse({
     status: 200,
-    description: 'Retorna todos los presupuestos de la orden de reparación',
+    description:
+      'Retorna una página de presupuestos. El total sin paginar viaja en X-Total-Count',
     type: [QuoteResponseDto],
   })
   @ApiResponse({
     status: 404,
     description: 'Orden de reparación no encontrada.',
   })
-  findByRepairOrder(
+  async findByRepairOrder(
+    @Res({ passthrough: true }) res: Response,
     @Param('repairOrderId', ParseUUIDPipe) repairOrderId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<QuoteResponseDto[]> {
-    return this.quotesService.findByRepairOrder(repairOrderId);
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.quotesService.findByRepairOrder(
+      repairOrderId,
+      { skip, take },
+    );
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get('customer/:customerId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
-  @ApiOperation({ summary: 'Obtener todos los presupuestos de un cliente' })
+  @ApiOperation({
+    summary: 'Obtener los presupuestos de un cliente (paginado)',
+  })
   @ApiParam({ name: 'customerId', description: 'ID del cliente' })
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
   @ApiResponse({
     status: 200,
-    description: 'Retorna todos los presupuestos del cliente',
+    description:
+      'Retorna una página de presupuestos. El total sin paginar viaja en X-Total-Count',
     type: [QuoteResponseDto],
   })
   @ApiResponse({ status: 404, description: 'Cliente no encontrado.' })
-  findByCustomer(
+  async findByCustomer(
+    @Res({ passthrough: true }) res: Response,
     @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<QuoteResponseDto[]> {
-    return this.quotesService.findByCustomer(customerId);
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.quotesService.findByCustomer(
+      customerId,
+      { skip, take },
+    );
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Patch(':id')

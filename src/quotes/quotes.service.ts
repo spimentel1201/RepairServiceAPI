@@ -162,11 +162,15 @@ export class QuotesService {
   }
 
   /**
-   * Obtiene todos los presupuestos de una orden de reparación
+   * Obtiene los presupuestos de una orden de reparación (paginado)
    * @param repairOrderId ID de la orden de reparación
-   * @returns Lista de presupuestos de la orden
+   * @param params Paginación opcional { skip, take }
+   * @returns Página + total (total viaja en `X-Total-Count`)
    */
-  async findByRepairOrder(repairOrderId: string): Promise<QuoteResponseDto[]> {
+  async findByRepairOrder(
+    repairOrderId: string,
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<QuoteResponseDto>> {
     const repairOrder = await this.prisma.repairOrder.findUnique({
       where: { id: repairOrderId },
     });
@@ -177,22 +181,36 @@ export class QuotesService {
       );
     }
 
-    const quotes = await this.prisma.quote.findMany({
-      where: { repairOrderId },
-      include: {
-        items: true,
-      },
-    });
+    const where = { repairOrderId };
+    const [quotes, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+        },
+      }),
+      this.prisma.quote.count({ where }),
+    ]);
 
-    return quotes.map((quote) => new QuoteResponseDto(quote));
+    return {
+      data: quotes.map((quote) => new QuoteResponseDto(quote)),
+      total,
+    };
   }
 
   /**
-   * Obtiene todos los presupuestos de un cliente
+   * Obtiene los presupuestos de un cliente (paginado)
    * @param customerId ID del cliente
-   * @returns Lista de presupuestos del cliente
+   * @param params Paginación opcional { skip, take }
+   * @returns Página + total (total viaja en `X-Total-Count`)
    */
-  async findByCustomer(customerId: string): Promise<QuoteResponseDto[]> {
+  async findByCustomer(
+    customerId: string,
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<QuoteResponseDto>> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
     });
@@ -201,14 +219,24 @@ export class QuotesService {
       throw new NotFoundException(`Cliente con ID ${customerId} no encontrado`);
     }
 
-    const quotes = await this.prisma.quote.findMany({
-      where: { customerId },
-      include: {
-        items: true,
-      },
-    });
+    const where = { customerId };
+    const [quotes, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+        },
+      }),
+      this.prisma.quote.count({ where }),
+    ]);
 
-    return quotes.map((quote) => new QuoteResponseDto(quote));
+    return {
+      data: quotes.map((quote) => new QuoteResponseDto(quote)),
+      total,
+    };
   }
 
   /**

@@ -121,37 +121,77 @@ export class RepairOrdersController {
   @Get('customer/:customerId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({
-    summary: 'Obtener todas las órdenes de reparación de un cliente',
+    summary: 'Obtener las órdenes de reparación de un cliente (paginado)',
   })
   @ApiParam({ name: 'customerId', description: 'ID del cliente' })
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
   @ApiResponse({
     status: 200,
-    description: 'Retorna todas las órdenes de reparación del cliente',
+    description:
+      'Retorna una página de órdenes. El total sin paginar viaja en X-Total-Count',
     type: [RepairOrderResponseDto],
   })
   @ApiResponse({ status: 404, description: 'Cliente no encontrado.' })
-  findByCustomer(
+  async findByCustomer(
+    @Res({ passthrough: true }) res: Response,
     @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<RepairOrderResponseDto[]> {
-    return this.repairOrdersService.findByCustomer(customerId);
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.repairOrdersService.findByCustomer(
+      customerId,
+      { skip, take },
+    );
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get('technician/:technicianId')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({
-    summary: 'Obtener todas las órdenes de reparación de un técnico',
+    summary: 'Obtener las órdenes de reparación de un técnico (paginado)',
   })
   @ApiParam({ name: 'technicianId', description: 'ID del técnico' })
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
   @ApiResponse({
     status: 200,
-    description: 'Retorna todas las órdenes de reparación del técnico',
+    description:
+      'Retorna una página de órdenes. El total sin paginar viaja en X-Total-Count',
     type: [RepairOrderResponseDto],
   })
   @ApiResponse({ status: 404, description: 'Técnico no encontrado.' })
-  findByTechnician(
+  async findByTechnician(
+    @Res({ passthrough: true }) res: Response,
     @Param('technicianId', ParseUUIDPipe) technicianId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<RepairOrderResponseDto[]> {
-    return this.repairOrdersService.findByTechnician(technicianId);
+    const { skip, take } = parsePagination(page, limit);
+    const { data, total } = await this.repairOrdersService.findByTechnician(
+      technicianId,
+      { skip, take },
+    );
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Patch(':id')
