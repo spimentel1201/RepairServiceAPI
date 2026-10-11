@@ -294,6 +294,10 @@ export class ProductsService {
       },
     });
 
+    if (!productWithRelations) {
+      throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+    }
+
     if (
       productWithRelations._count.repairOrderItems > 0 ||
       productWithRelations._count.saleItems > 0
@@ -325,7 +329,7 @@ export class ProductsService {
    * @param description Descripción del producto
    * @returns Objeto con los metadatos extraídos
    */
-  private extractMetadata(description?: string): {
+  private extractMetadata(description?: string | null): {
     imageUrl?: string;
     brand?: string;
     model?: string;
@@ -353,7 +357,7 @@ export class ProductsService {
       throw new BadRequestException('No se ha proporcionado ningún archivo');
     }
 
-    let products = [];
+    let products: any[] = [];
 
     try {
       // Procesar el archivo según su tipo
@@ -410,7 +414,7 @@ export class ProductsService {
    */
   private async parseCsvFile(file: Express.Multer.File): Promise<any[]> {
     return new Promise((resolve, reject) => {
-      const results = [];
+      const results: any[] = [];
       const stream = Readable.from(file.buffer);
 
       stream
@@ -526,7 +530,7 @@ export class ProductsService {
    * @returns Resultado de la operación
    */
   private async saveImportedProducts(products: any[]) {
-    const errors = [];
+    const errors: { row: number; error: string }[] = [];
     let successCount = 0;
 
     for (let i = 0; i < products.length; i++) {
@@ -692,7 +696,7 @@ export class ProductsService {
     if (data.length === 0) return '';
 
     const headers = Object.keys(data[0]);
-    const csvRows = [];
+    const csvRows: string[] = [];
 
     // Añadir encabezados
     csvRows.push(headers.join(','));

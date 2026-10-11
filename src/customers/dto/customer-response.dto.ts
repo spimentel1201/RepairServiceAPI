@@ -8,7 +8,7 @@ export class CustomerResponseDto {
   name: string;
 
   @ApiPropertyOptional()
-  email?: string;
+  email?: string | null;
 
   @ApiProperty()
   phone: string;
@@ -20,7 +20,7 @@ export class CustomerResponseDto {
   documentNumber: string;
 
   @ApiPropertyOptional()
-  address?: string;
+  address?: string | null;
 
   @ApiProperty()
   createdAt: Date;

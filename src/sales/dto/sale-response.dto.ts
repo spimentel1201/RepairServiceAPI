@@ -29,7 +29,8 @@ export class SaleItemResponseDto {
   productName: string;
 
   @ApiPropertyOptional()
-  productDescription?: string;
+  productDescription?: string | null;
+
 
   constructor(partial: Partial<SaleItemResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);

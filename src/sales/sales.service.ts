@@ -106,6 +106,10 @@ export class SalesService {
     for (const item of createSaleDto.items) {
       const product = productMap.get(item.productId);
 
+      if (!product) {
+        throw new BadRequestException('Uno o más productos no existen');
+      }
+
       if (product.stock < item.quantity) {
         throw new BadRequestException(
           `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`,
@@ -130,7 +134,7 @@ export class SalesService {
 
         if (reserved.count === 0) {
           throw new BadRequestException(
-            `Stock insuficiente para el producto ${product.name}. Disponible: ${product.stock}, Solicitado: ${item.quantity}`,
+            `Stock insuficiente para el producto ${product?.name ?? item.productId}. Solicitado: ${item.quantity}`,
           );
         }
       }
@@ -144,11 +148,19 @@ export class SalesService {
           totalAmount,
           paymentMethod: createSaleDto.paymentMethod,
           items: {
-            create: createSaleDto.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              price: toAmount(productMap.get(item.productId).price),
-            })),
+            create: createSaleDto.items.map((item) => {
+              const product = productMap.get(item.productId);
+              if (!product) {
+                throw new BadRequestException(
+                  'Uno o más productos no existen',
+                );
+              }
+              return {
+                productId: item.productId,
+                quantity: item.quantity,
+                price: toAmount(product.price),
+              };
+            }),
           },
         },
         include: {
@@ -162,6 +174,9 @@ export class SalesService {
     // Preparar la respuesta
     const saleItems = sale.items.map((item) => {
       const product = productMap.get(item.productId);
+      if (!product) {
+        throw new BadRequestException('Uno o más productos no existen');
+      }
       return new SaleItemResponseDto({
         ...item,
         productName: product.name,

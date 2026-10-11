@@ -9,7 +9,7 @@ export class ProductResponseDto {
   name: string;
 
   @ApiPropertyOptional()
-  description?: string;
+  description?: string | null;
 
   @ApiProperty()
   price: number;
@@ -27,7 +27,7 @@ export class ProductResponseDto {
   isActive: boolean;
 
   @ApiPropertyOptional()
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @ApiProperty()
   createdAt: Date;

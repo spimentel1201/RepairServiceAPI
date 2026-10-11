@@ -10,6 +10,7 @@ import {
   Query,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -54,8 +55,11 @@ export class SalesController {
     @Body() createSaleDto: CreateSaleDto,
     @Req() req: Request,
   ): Promise<SaleResponseDto> {
-    const userId = req.user['id'];
-    return this.salesService.create(createSaleDto, userId);
+    const user = req.user as { id: string } | undefined;
+    if (!user) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
+    return this.salesService.create(createSaleDto, user.id);
   }
 
   @Get()

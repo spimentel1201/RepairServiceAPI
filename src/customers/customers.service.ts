@@ -246,6 +246,10 @@ export class CustomersService {
       },
     });
 
+    if (!customerWithRelations) {
+      throw new NotFoundException(`Cliente con ID ${id} no encontrado`);
+    }
+
     if (
       customerWithRelations._count.repairOrders > 0 ||
       customerWithRelations._count.quotes > 0 ||
