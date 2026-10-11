@@ -90,7 +90,11 @@ export function configureApp(app: INestApplication): void {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
+    // Ruta canónica + alias: en Vercel el rewrite `/(.*)→/api/index.js`
+    // puede dejar `/api/docs` en 404 según cómo resuelva el serverless;
+    // exponer también `/docs` cubre ambos casos sin romper clientes.
     SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('docs', app, document);
   }
 }
 

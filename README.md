@@ -95,6 +95,8 @@ y los e2e contra un servicio `postgres:17`.
 
 - `api/index.js` re-exporta `dist/main` como función serverless; `vercel-build`
   compila el proyecto en cada despliegue.
+- Swagger responde en `/api/docs` y en el alias `/docs` (el rewrite serverless
+  puede dejar la primera en 404 según el deploy; el alias cubre ese caso).
 - `dist/` **no se versiona** (ya se genera en el build).
 - Las variables de entorno se configuran en el dashboard de Vercel, nunca en el repo
   (`.env` está en `.gitignore`).
