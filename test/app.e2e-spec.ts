@@ -4,6 +4,8 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/main';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { QuotesService } from '../src/quotes/quotes.service';
+import { SalesService } from '../src/sales/sales.service';
 
 /**
  * Tests de integracion contra una base de datos PostgreSQL real.
@@ -159,5 +161,114 @@ describe('RepairServiceAPI (e2e)', () => {
         campoRaro: true,
       })
       .expect(400);
+  });
+
+  describe('cobro de presupuestos (quote → venta)', () => {
+    let orderId: string;
+    let quoteId: string;
+
+    beforeAll(async () => {
+      const customer = await prisma.customer.create({
+        data: {
+          name: `Cliente e2e ${suffix}`,
+          phone: `999${String(suffix).slice(-7)}`,
+          documentType: 'DNI',
+          documentNumber: `${String(suffix).slice(-8)}`,
+        },
+      });
+      const order = await prisma.repairOrder.create({
+        data: {
+          customerId: customer.id,
+          description: 'Laptop no enciende (e2e)',
+          initialReviewCost: 0,
+          totalCost: 0,
+        },
+      });
+      orderId = order.id;
+      const tech = await prisma.user.findUnique({
+        where: { email: techEmail },
+      });
+      // El alta vía API es solo ADMIN: se siembra PENDING directo y el flujo
+      // de negocio (aprobar, facturar) corre por los servicios reales.
+      const quote = await prisma.quote.create({
+        data: {
+          repairOrderId: orderId,
+          customerId: customer.id,
+          technicianId: tech!.id,
+          status: 'PENDING',
+          totalAmount: 150,
+          items: {
+            create: [
+              { quantity: 1, price: 100, description: 'Mano de obra e2e' },
+              { quantity: 1, price: 50, description: 'Repuesto e2e' },
+            ],
+          },
+        },
+      });
+      quoteId = quote.id;
+    });
+
+    it('aprobar sincroniza el total de la orden (RECEIVED → IN_PROGRESS)', async () => {
+      const quotes = app.get(QuotesService);
+      await quotes.updateStatus(quoteId, 'APPROVED' as any);
+
+      const res = await request(app.getHttpServer())
+        .get(`/repair-orders/${orderId}`)
+        .set('Authorization', `Bearer ${techToken}`)
+        .expect(200);
+
+      expect(res.body.totalCost).toBe(150);
+      expect(res.body.status).toBe('IN_PROGRESS');
+      expect(res.body.billing).toMatchObject({
+        billableQuotes: 1,
+        pendingQuotes: 0,
+        salesCount: 0,
+        billedTotal: 0,
+      });
+    });
+
+    it('facturar crea la venta desde el quote y lo marca INVOICED', async () => {
+      const sales = app.get(SalesService);
+      const tech = await prisma.user.findUnique({
+        where: { email: techEmail },
+      });
+      const sale = await sales.createFromQuote(
+        quoteId,
+        'YAPE' as any,
+        tech!.id,
+      );
+
+      expect(sale.quoteId).toBe(quoteId);
+      expect(sale.repairOrderId).toBe(orderId);
+      expect(sale.totalAmount).toBe(150);
+      expect(sale.items).toHaveLength(2);
+
+      const quote = await prisma.quote.findUnique({ where: { id: quoteId } });
+      expect(quote?.status).toBe('INVOICED');
+
+      const res = await request(app.getHttpServer())
+        .get(`/sales?repairOrderId=${orderId}`)
+        .set('Authorization', `Bearer ${techToken}`)
+        .expect(200);
+      expect(Number(res.headers['x-total-count'])).toBe(1);
+    });
+
+    it('doble cobro del mismo quote → 409', async () => {
+      const sales = app.get(SalesService);
+      const tech = await prisma.user.findUnique({
+        where: { email: techEmail },
+      });
+      await expect(
+        sales.createFromQuote(quoteId, 'CASH' as any, tech!.id),
+      ).rejects.toThrow(/ya fue facturado/);
+    });
+
+    it('un tecnico no puede facturar por HTTP (solo ADMIN) → 403', async () => {
+      await request(app.getHttpServer())
+        .post(`/quotes/${quoteId}/convert-to-sale`)
+        .set('Authorization', `Bearer ${techToken}`)
+        .send({ paymentMethod: 'YAPE' })
+        .expect(403);
+    });
   });
 });
