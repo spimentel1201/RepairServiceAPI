@@ -94,6 +94,31 @@ Esto incluye los scoped: `/quotes/customer/:id`, `/quotes/repair-order/:id`,
 - `change-password` NO revoca sesiones automáticamente; tras un reset, el ADMIN
   puede llamar a `revoke-sessions` si lo necesita.
 
+### Cobro de presupuestos (quote → venta)
+
+Flujo: `PENDING → APPROVED → INVOICED`.
+
+1. El técnico cotiza (`POST /quotes`, estado `PENDING`).
+2. Al aprobar (`PATCH /quotes/:id/status` → `APPROVED`), la orden recalcula
+   `totalCost` = Σ quotes `APPROVED`+`INVOICED` y avanza a `IN_PROGRESS`
+   (si seguía en `RECEIVED`/`DIAGNOSED`).
+3. Al cobrar (`POST /quotes/:id/convert-to-sale` con `paymentMethod`), se crea
+   la venta con los ítems del presupuesto, el quote pasa a `INVOICED` y la
+   orden se recalcula. Todo en una transacción.
+4. La orden muestra el cobro en `GET /repair-orders/:id` → `billing`
+   (`billedTotal`, `salesCount`, `billableQuotes`, `pendingQuotes`); las ventas
+   se listan con `GET /sales?repairOrderId=`.
+
+Reglas:
+
+- Solo `APPROVED` se factura; doble cobro → `409` (`Sale.quoteId` único).
+- `INVOICED` congela el documento: no se edita ni elimina (409).
+- Transiciones válidas: `PENDING→APPROVED/REJECTED/EXPIRED`,
+  `APPROVED→REJECTED/EXPIRED`, `REJECTED/EXPIRED→PENDING` (re-cotizar).
+- Los ítems de servicio no mueven stock (sin `productId`); al eliminar una
+  venta solo se restaura stock de ítems con producto.
+- `GET /sales/:id/invoice` factura esos ítems con su snapshot de descripción.
+
 ## Tests
 
 ```bash
@@ -138,8 +163,10 @@ Si la BD de producción se creó con `prisma db push` y no tiene `_prisma_migrat
 
 1. `npx prisma migrate resolve --applied 0_init` — marca el esquema actual como baseline.
 2. `npx prisma migrate deploy` — aplica `1_align_existing_database` (21 índices +
-   conversión de dinero a `DECIMAL(10,2)`; es idempotente) y `2_token_version`
-   (`User.tokenVersion` con default 0; idempotente vía `IF NOT EXISTS`).
+   conversión de dinero a `DECIMAL(10,2)`; es idempotente), `2_token_version`
+   (`User.tokenVersion` con default 0; idempotente vía `IF NOT EXISTS`) y
+   `3_quote_billing` (estado `INVOICED`, `Sale.quoteId` único, `Sale.repairOrderId`,
+   `SaleItem` de servicio; idempotente).
 3. `npx prisma migrate status` — debe decir que el esquema está al día.
 
 Si la BD tiene migraciones antiguas registradas que ya no existen en el repo, bórralas

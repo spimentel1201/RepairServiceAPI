@@ -3,6 +3,8 @@
 > Estado al 11/10/2026. Los Sprints 1–3 están **completados, validados y pushados**
 > en sus ramas; falta integrarlos. El Sprint 4 está **implementado** en
 > `feat/sprint-4-hardening` (apilada sobre S3), pendiente de merge + deploy.
+> El Sprint 5 (cobro de presupuestos) está **implementado** en
+> `feat/sprint-5-quote-billing` (apilada sobre S4), pendiente de merge + deploy.
 >
 > | Rama | Contenido | Estado |
 > |---|---|---|
@@ -38,7 +40,25 @@
 - [ ] **`prisma.config.ts`** — REVERTIDO tras probar: Prisma 6.13 no acepta `datasource` en `defineConfig` (`'datasource' does not exist in type 'PrismaConfig'`) y el archivo desactiva la carga automática del `.env` ("skipping environment variable loading"). Retomar al subir a Prisma 7. Sin impacto: solo queda el warning de `package.json#prisma` deprecado.
 - [x] *(Opcional)* **Swagger bajo Vercel** — alias `/docs` además de `/api/docs`; verificar en preview.
 
-## 3. Higiene / decisiones del dueño del proyecto
+## 3. Sprint 5 — cobro de presupuestos (implementado en `feat/sprint-5-quote-billing`)
+
+- [x] **Convert-to-sale** — `POST /quotes/:id/convert-to-sale` (ADMIN): crea la
+  venta desde un `APPROVED`, marca `INVOICED`, sincroniza la orden, todo en
+  transacción. Anti doble-cobro (`Sale.quoteId` único → 409).
+- [x] **Máquina de estados** — transiciones validadas, `INVOICED` terminal y
+  congelado (no edita/elimina), `INVOICED` solo vía cobro.
+- [x] **Sincronía orden** — `recalcBilling`: `totalCost` = Σ vigentes
+  (recompute, no acumula) + avance a `IN_PROGRESS`; corre en aprobar,
+  actualizar, eliminar y facturar.
+- [x] **Lecturas** — `billing` en `GET /repair-orders/:id`;
+  `GET /sales?quoteId=` / `?repairOrderId=`.
+- [x] **Migración `3_quote_billing`** — idempotente; aplicar en Neon con
+  conexión directa. Nota: `ADD VALUE 'INVOICED'` requiere PG 12+ en
+  transacción (Neon PG 17 OK; si falla, aplicar esa línea vía psql y reintentar).
+- Pendiente rutina: merge tras S4 + `migrate deploy` + deploy Vercel. e2e del
+  flujo corre en CI (4 tests nuevos).
+
+## 4. Tras mergear S4–S5 (dueño del proyecto)
 
 - [ ] **DB local para desarrollo** — el `.env` local apunta a **Neon producción**
   (`electrodb`); cualquier prueba local escribe en prod. Ejemplo rápido:
