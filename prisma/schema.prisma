@@ -1,5 +1,5 @@
 // This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// learn more about the docs here: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -20,12 +20,18 @@ model User {
   phone     String
   role      Role     @default(TECHNICIAN)
   isActive    Boolean  @default(true)
+  // Versión de tokens: se incrementa al cerrar sesión / revocar sesiones.
+  // El JWT lleva `tv`; si no coincide, el token está revocado. Default 0 para
+  // que los tokens emitidos antes de esta columna sigan válidos (compat).
+  tokenVersion Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   repairOrders RepairOrder[]
   quotes       Quote[]
   sales        Sale[]
+
+  @@index([role])
 }
 
 enum Role {
@@ -47,14 +53,18 @@ model Customer {
   repairOrders RepairOrder[]
   quotes       Quote[]
   sales        Sale[]
+
+  @@index([name])
+  @@index([phone])
 }
 
 model Product {
   id          String      @id @default(uuid())
   name        String
   description String?
-  price       Float
-  cost        Float
+  // Dinero en Decimal (no Float): evita errores de redondeo en totales y facturas
+  price       Decimal     @db.Decimal(10, 2)
+  cost        Decimal     @db.Decimal(10, 2)
   stock       Int         @default(0)
   category    String
   isActive    Boolean     @default(true)
@@ -64,6 +74,9 @@ model Product {
 
   repairOrderItems RepairOrderItem[]
   saleItems        SaleItem[]
+
+  @@index([category])
+  @@index([name])
 }
 
 model RepairOrder {
@@ -73,8 +86,8 @@ model RepairOrder {
   status      RepairOrderStatus  @default(RECEIVED)
   description String
   notes       String?
-  initialReviewCost Float        @default(0)
-  totalCost   Float              @default(0)
+  initialReviewCost Decimal      @default(0) @db.Decimal(10, 2)
+  totalCost   Decimal            @default(0) @db.Decimal(10, 2)
   startDate   DateTime           @default(now())
   endDate     DateTime?
   createdAt   DateTime           @default(now())
@@ -84,6 +97,12 @@ model RepairOrder {
   technician  User?               @relation(fields: [technicianId], references: [id])
   items       RepairOrderItem[]
   quotes      Quote[]
+  sales       Sale[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([technicianId])
 }
 
 enum RepairOrderStatus {
@@ -107,28 +126,37 @@ model RepairOrderItem {
   problemDescription String // Descripción del problema
   accessories   String[]    // Lista de accesorios como strings
   quantity      Int
-  price         Float
+  price         Decimal     @db.Decimal(10, 2)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   repairOrder   RepairOrder @relation(fields: [repairOrderId], references: [id])
   product       Product?    @relation(fields: [productId], references: [id])
+
+  @@index([repairOrderId])
+  @@index([productId])
 }
 
 model Quote {
-  id            String      @id @default(uuid())
+  id            String   @id @default(uuid())
   repairOrderId String
   customerId    String
   technicianId  String
   status        QuoteStatus @default(PENDING)
-  totalAmount   Float
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  totalAmount   Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   repairOrder   RepairOrder @relation(fields: [repairOrderId], references: [id])
   customer      Customer    @relation(fields: [customerId], references: [id])
   technician    User        @relation(fields: [technicianId], references: [id])
   items         QuoteItem[]
+  sale          Sale?
+
+  @@index([status])
+  @@index([repairOrderId])
+  @@index([customerId])
+  @@index([technicianId])
 }
 
 enum QuoteStatus {
@@ -136,18 +164,21 @@ enum QuoteStatus {
   APPROVED
   REJECTED
   EXPIRED
+  INVOICED
 }
 
 model QuoteItem {
   id          String   @id @default(uuid())
   quoteId     String
   quantity    Int
-  price       Float
+  price       Decimal  @db.Decimal(10, 2)
   description String?  // Añadimos este campo para la descripción del ítem
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   quote       Quote    @relation(fields: [quoteId], references: [id])
+
+  @@index([quoteId])
 }
 
 enum PaymentMethod {
@@ -164,25 +195,44 @@ model Sale {
   customerId    String?       // Optional for non-registered customers
   userId        String
   customerName  String?       // For non-registered customers
-  totalAmount   Float
+  totalAmount   Decimal       @db.Decimal(10, 2)
   paymentMethod PaymentMethod
+  // Cobro de presupuesto: una venta nace de un quote APPROVED (1:1).
+  quoteId       String?       @unique
+  // Orden que origina el cobro (trazabilidad; varias ventas pueden apuntar
+  // a la misma orden en el futuro con abonos parciales).
+  repairOrderId String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   customer      Customer?     @relation(fields: [customerId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
+  quote         Quote?        @relation(fields: [quoteId], references: [id])
+  repairOrder   RepairOrder?  @relation(fields: [repairOrderId], references: [id])
   items         SaleItem[]
+
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([userId])
+  @@index([repairOrderId])
 }
 
 model SaleItem {
   id        String   @id @default(uuid())
   saleId    String
-  productId String
+  // Nullable: los ítems facturados desde un presupuesto son mano de
+  // obra/servicios (snapshot en `description`), no necesariamente catálogo.
+  // Solo los ítems con productId mueven stock.
+  productId String?
   quantity  Int
-  price     Float
+  price     Decimal  @db.Decimal(10, 2)
+  description String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   sale      Sale     @relation(fields: [saleId], references: [id])
-  product   Product  @relation(fields: [productId], references: [id])
+  product   Product? @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
 }

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class ProductResponseDto {
   @ApiProperty()
@@ -8,7 +9,7 @@ export class ProductResponseDto {
   name: string;
 
   @ApiPropertyOptional()
-  description?: string;
+  description?: string | null;
 
   @ApiProperty()
   price: number;
@@ -26,7 +27,7 @@ export class ProductResponseDto {
   isActive: boolean;
 
   @ApiPropertyOptional()
-  imageUrl?: string;
+  imageUrl?: string | null;
 
   @ApiProperty()
   createdAt: Date;
@@ -34,7 +35,10 @@ export class ProductResponseDto {
   @ApiProperty()
   updatedAt: Date;
 
-  constructor(partial: Partial<ProductResponseDto>) {
+  constructor(partial: Partial<ProductResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
+    this.price = toAmount(this.price);
+    this.cost = toAmount(this.cost);
   }
 }

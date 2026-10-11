@@ -4,16 +4,22 @@ import { ExecutionContext } from '@nestjs/common';
 
 /**
  * LoginThrottlerGuard - Guard para limitar intentos de inicio de sesión
- * 
+ *
  * Este guard extiende ThrottlerGuard para implementar limitación de tasa (rate limiting)
  * específicamente en los endpoints de inicio de sesión, ayudando a prevenir ataques
  * de fuerza bruta.
- * 
+ *
  * La limitación se aplica por combinación de dirección IP y correo electrónico,
  * lo que permite un control más granular.
  */
 @Injectable()
 export class LoginThrottlerGuard extends ThrottlerGuard {
+  /**
+   * Endpoints que reciben limitación de tasa.
+   * Incluye register para evitar el alta masiva de usuarios.
+   */
+  private static readonly THROTTLED_PATHS = ['/auth/login', '/auth/register'];
+
   /**
    * Obtiene el identificador único para el seguimiento de limitación de tasa
    * @param req - Objeto de solicitud HTTP
@@ -22,7 +28,7 @@ export class LoginThrottlerGuard extends ThrottlerGuard {
   protected getTracker(req: Record<string, any>): Promise<string> {
     // Usa la dirección IP y el correo electrónico intentado para el seguimiento
     // Esto hace que el límite de tasa sea específico para cada combinación de IP + correo
-    return Promise.resolve(`${req.ip}-${req.body.email}`);
+    return Promise.resolve(`${req.ip}-${req.body?.email ?? ''}`);
   }
 
   /**
@@ -32,13 +38,16 @@ export class LoginThrottlerGuard extends ThrottlerGuard {
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
-    const isLogin = req.path.includes('/auth/login') && req.method === 'POST';
-    
-    // Solo aplica limitación de tasa al endpoint de inicio de sesión
-    if (isLogin) {
+    const isThrottled =
+      req.method === 'POST' &&
+      LoginThrottlerGuard.THROTTLED_PATHS.some((path) =>
+        req.path.includes(path),
+      );
+
+    if (isThrottled) {
       return super.canActivate(context);
     }
-    
+
     return true;
   }
 }

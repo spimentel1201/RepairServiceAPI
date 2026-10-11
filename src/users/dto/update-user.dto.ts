@@ -4,7 +4,7 @@ import { IsBoolean, IsOptional } from 'class-validator';
 
 /**
  * UpdateUserDto - DTO para la actualización de usuarios
- * 
+ *
  * Extiende CreateUserDto usando PartialType para hacer
  * todos los campos opcionales, permitiendo actualizaciones
  * parciales de usuarios.

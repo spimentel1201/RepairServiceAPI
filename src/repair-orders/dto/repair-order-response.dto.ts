@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RepairOrderStatus } from '@prisma/client';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'ID del ítem' })
@@ -32,7 +33,9 @@ export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'Precio unitario' })
   price: number;
 
-  @ApiPropertyOptional({ description: 'ID del producto relacionado (si aplica)' })
+  @ApiPropertyOptional({
+    description: 'ID del producto relacionado (si aplica)',
+  })
   productId?: string;
 
   @ApiProperty({ description: 'Fecha de creación' })
@@ -41,13 +44,35 @@ export class RepairOrderItemResponseDto {
   @ApiProperty({ description: 'Fecha de actualización' })
   updatedAt: Date;
 
-  constructor(partial: Partial<RepairOrderItemResponseDto>) {
+  constructor(
+    partial: Partial<RepairOrderItemResponseDto> | Record<string, unknown>,
+  ) {
     Object.assign(this, partial);
+    // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
+    this.price = toAmount(this.price);
   }
 }
 
-export class RepairOrderResponseDto {
-  @ApiProperty({ description: 'ID de la orden' })
+export class RepairOrderBillingDto {
+  @ApiProperty({ description: 'Total cobrado en ventas vinculadas' })
+  billedTotal: number;
+
+  @ApiProperty({ description: 'Cantidad de ventas vinculadas' })
+  salesCount: number;
+
+  @ApiProperty({ description: 'Presupuestos vigentes (APPROVED + INVOICED)' })
+  billableQuotes: number;
+
+  @ApiProperty({ description: 'Presupuestos pendientes de decisión' })
+  pendingQuotes: number;
+
+  constructor(partial: Partial<RepairOrderBillingDto>) {
+    Object.assign(this, partial);
+    this.billedTotal = toAmount(this.billedTotal);
+  }
+}
+
+export class RepairOrderResponseDto {  @ApiProperty({ description: 'ID de la orden' })
   id: string;
 
   @ApiProperty({ description: 'ID del cliente' })
@@ -86,10 +111,29 @@ export class RepairOrderResponseDto {
   @ApiPropertyOptional({ description: 'Fecha de finalización' })
   endDate?: Date;
 
-  @ApiProperty({ description: 'Ítems de la orden', type: [RepairOrderItemResponseDto] })
+  @ApiProperty({
+    description: 'Ítems de la orden',
+    type: [RepairOrderItemResponseDto],
+  })
   items: RepairOrderItemResponseDto[];
 
-  constructor(partial: Partial<RepairOrderResponseDto>) {
+  @ApiPropertyOptional({
+    description: 'Resumen de cobro (solo en detalle por ID)',
+    type: RepairOrderBillingDto,
+  })
+  billing?: RepairOrderBillingDto;
+
+  constructor(
+    partial: Partial<RepairOrderResponseDto> | Record<string, unknown>,
+  ) {
     Object.assign(this, partial);
+    this.initialReviewCost = toAmount(this.initialReviewCost);
+    this.totalCost = toAmount(this.totalCost);
+    this.items = (Array.isArray(this.items) ? this.items : []).map(
+      (item) => new RepairOrderItemResponseDto(item),
+    );
+    if (this.billing) {
+      this.billing = new RepairOrderBillingDto(this.billing);
+    }
   }
 }

@@ -1,19 +1,38 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseUUIDPipe, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  ParseUUIDPipe,
+  Query,
+  Req,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { SaleResponseDto } from './dto/sale-response.dto';
 import { SaleInvoiceDto } from './dto/sale-invoice.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { Request } from 'express';
+import { Request, Response } from 'express';
+import { parsePagination } from '../common/pagination/pagination.utils';
 
 @ApiTags('sales')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('sales')
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
@@ -21,49 +40,108 @@ export class SalesController {
   @Post()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Crear una nueva venta' })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'La venta ha sido creada exitosamente.',
-    type: SaleResponseDto
+    type: SaleResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
-  @ApiResponse({ status: 404, description: 'Cliente o producto no encontrado.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Cliente o producto no encontrado.',
+  })
   @ApiBody({ type: CreateSaleDto })
-  create(@Body() createSaleDto: CreateSaleDto, @Req() req: Request): Promise<SaleResponseDto> {
-    const userId = req.user['id'];
-    return this.salesService.create(createSaleDto, userId);
+  create(
+    @Body() createSaleDto: CreateSaleDto,
+    @Req() req: Request,
+  ): Promise<SaleResponseDto> {
+    const user = req.user as { id: string } | undefined;
+    if (!user) {
+      throw new UnauthorizedException('Usuario no autenticado');
+    }
+    return this.salesService.create(createSaleDto, user.id);
   }
 
   @Get()
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener todas las ventas' })
-  @ApiQuery({ name: 'startDate', description: 'Fecha de inicio (YYYY-MM-DD)', required: false })
-  @ApiQuery({ name: 'endDate', description: 'Fecha de fin (YYYY-MM-DD)', required: false })
-  @ApiQuery({ name: 'customerId', description: 'ID del cliente', required: false })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Retorna todas las ventas',
-    type: [SaleResponseDto]
+  @ApiQuery({
+    name: 'startDate',
+    description: 'Fecha de inicio (YYYY-MM-DD)',
+    required: false,
   })
-  findAll(
+  @ApiQuery({
+    name: 'endDate',
+    description: 'Fecha de fin (YYYY-MM-DD)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'customerId',
+    description: 'ID del cliente',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'quoteId',
+    description: 'Filtra la venta originada por un presupuesto',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'repairOrderId',
+    description: 'Filtra las ventas de una orden de reparación',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'page',
+    description: 'Página (base 1, por defecto 1)',
+    required: false,
+  })
+  @ApiQuery({
+    name: 'limit',
+    description: 'Registros por página (por defecto 20, máx. 100)',
+    required: false,
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Retorna una página de ventas. El total de registros sin paginar se expone en la cabecera X-Total-Count',
+    type: [SaleResponseDto],
+  })
+  async findAll(
+    @Res({ passthrough: true }) res: Response,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('customerId') customerId?: string,
+    @Query('quoteId') quoteId?: string,
+    @Query('repairOrderId') repairOrderId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ): Promise<SaleResponseDto[]> {
     const startDateTime = startDate ? new Date(startDate) : undefined;
     const endDateTime = endDate ? new Date(endDate) : undefined;
-    
-    return this.salesService.findAll(startDateTime, endDateTime, customerId);
+    const { skip, take } = parsePagination(page, limit);
+
+    const { data, total } = await this.salesService.findAll({
+      startDate: startDateTime,
+      endDate: endDateTime,
+      customerId,
+      quoteId,
+      repairOrderId,
+      skip,
+      take,
+    });
+
+    res.set('X-Total-Count', String(total));
+    return data;
   }
 
   @Get(':id')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener una venta por ID' })
   @ApiParam({ name: 'id', description: 'ID de la venta' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Retorna la venta',
-    type: SaleResponseDto
+    type: SaleResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Venta no encontrada.' })
   findOne(@Param('id', ParseUUIDPipe) id: string): Promise<SaleResponseDto> {
@@ -74,13 +152,15 @@ export class SalesController {
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Generar factura o ticket para una venta' })
   @ApiParam({ name: 'id', description: 'ID de la venta' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Retorna la factura o ticket',
-    type: SaleInvoiceDto
+    type: SaleInvoiceDto,
   })
   @ApiResponse({ status: 404, description: 'Venta no encontrada.' })
-  generateInvoice(@Param('id', ParseUUIDPipe) id: string): Promise<SaleInvoiceDto> {
+  generateInvoice(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<SaleInvoiceDto> {
     return this.salesService.generateInvoice(id);
   }
 
@@ -89,16 +169,16 @@ export class SalesController {
   @ApiOperation({ summary: 'Actualizar una venta' })
   @ApiParam({ name: 'id', description: 'ID de la venta' })
   @ApiBody({ type: UpdateSaleDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'La venta ha sido actualizada exitosamente.',
-    type: SaleResponseDto
+    type: SaleResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
   @ApiResponse({ status: 404, description: 'Venta no encontrada.' })
   update(
-    @Param('id', ParseUUIDPipe) id: string, 
-    @Body() updateSaleDto: UpdateSaleDto
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateSaleDto: UpdateSaleDto,
   ): Promise<SaleResponseDto> {
     return this.salesService.update(id, updateSaleDto);
   }
@@ -107,18 +187,18 @@ export class SalesController {
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Eliminar una venta' })
   @ApiParam({ name: 'id', description: 'ID de la venta' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'La venta ha sido eliminada exitosamente.',
     schema: {
       type: 'object',
       properties: {
         message: {
           type: 'string',
-          example: 'Venta eliminada correctamente'
-        }
-      }
-    }
+          example: 'Venta eliminada correctamente',
+        },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Error al eliminar la venta.' })
   @ApiResponse({ status: 404, description: 'Venta no encontrada.' })

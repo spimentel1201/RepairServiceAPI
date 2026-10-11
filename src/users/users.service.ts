@@ -1,20 +1,28 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { Prisma, Role } from '@prisma/client';
+import { Paged } from '../common/pagination/pagination.utils';
 import * as bcrypt from 'bcrypt';
 
 /**
  * UsersService - Servicio para la gestión de usuarios
- * 
+ *
  * Este servicio implementa la lógica de negocio para:
  * - Crear usuarios
  * - Buscar usuarios (por ID o email)
  * - Actualizar usuarios
  * - Desactivar usuarios (eliminación lógica)
  * - Cambiar contraseñas
- * 
+ *
  * Utiliza PrismaService para interactuar con la base de datos
  * y bcrypt para el manejo seguro de contraseñas.
  */
@@ -52,12 +60,28 @@ export class UsersService {
   }
 
   /**
-   * Obtiene todos los usuarios
-   * @returns Lista de usuarios (sin contraseñas)
+   * Obtiene una página de usuarios
+   * @param params Filtro opcional por rol y paginación
+   * @returns Página de usuarios (sin contraseñas) y total de registros
    */
-  async findAll(): Promise<UserResponseDto[]> {
-    const users = await this.prisma.user.findMany();
-    return users.map(user => new UserResponseDto(user));
+  async findAll(
+    params: { role?: Role; skip?: number; take?: number } = {},
+  ): Promise<Paged<UserResponseDto>> {
+    const where: Prisma.UserWhereInput = params.role
+      ? { role: params.role }
+      : {};
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return { data: users.map((user) => new UserResponseDto(user)), total };
   }
 
   /**
@@ -103,7 +127,10 @@ export class UsersService {
    * @throws NotFoundException si el usuario no existe
    * @throws ConflictException si el nuevo email ya está en uso
    */
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
     // Verifica si el usuario existe
     await this.findOne(id);
 
@@ -119,7 +146,7 @@ export class UsersService {
     }
 
     // Si se actualiza la contraseña, la encripta
-    let data = { ...updateUserDto };
+    const data = { ...updateUserDto };
     if (updateUserDto.password) {
       data.password = await bcrypt.hash(updateUserDto.password, 10);
     }
@@ -143,27 +170,30 @@ export class UsersService {
     // Verifica si el usuario existe
     await this.findOne(id);
 
-    try {
-      await this.prisma.user.update({
-        where: { id },
-        data: { isActive: false },
-      });
-      return { message: 'User deactivated successfully' };
-    } catch (error) {
-      throw new BadRequestException('Cannot deactivate user.');
-    }
+    await this.prisma.user.update({
+      where: { id },
+      data: { isActive: false },
+    });
+
+    return { message: 'User deactivated successfully' };
   }
 
   /**
    * Cambia la contraseña de un usuario
    * @param id - ID del usuario
-   * @param currentPassword - Contraseña actual
-   * @param newPassword - Nueva contraseña
+   * @param changePasswordDto - Contraseña actual (si aplica) y nueva contraseña
+   * @param options.requireCurrentPassword - Si es true exige validar la
+   *        contraseña actual (cambio propio); si es false permite el reset
+   *        hecho por un administrador
    * @returns Mensaje de confirmación
    * @throws NotFoundException si el usuario no existe
-   * @throws BadRequestException si la contraseña actual es incorrecta
+   * @throws BadRequestException si falta/errónea la contraseña actual o la nueva no cumple requisitos
    */
-  async changePassword(id: string, currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  async changePassword(
+    id: string,
+    changePasswordDto: ChangePasswordDto,
+    options: { requireCurrentPassword?: boolean } = {},
+  ): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
@@ -172,17 +202,44 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isPasswordValid) {
-      throw new BadRequestException('Current password is incorrect');
+    if (options.requireCurrentPassword !== false) {
+      if (!changePasswordDto.currentPassword) {
+        throw new BadRequestException('Current password is required');
+      }
+
+      const isPasswordValid = await bcrypt.compare(
+        changePasswordDto.currentPassword,
+        user.password,
+      );
+      if (!isPasswordValid) {
+        throw new BadRequestException('Current password is incorrect');
+      }
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 10);
     await this.prisma.user.update({
       where: { id },
       data: { password: hashedPassword },
     });
 
     return { message: 'Password changed successfully' };
+  }
+
+  /**
+   * Revoca todas las sesiones del usuario incrementando `tokenVersion`.
+   * No afecta a tokens emitidos antes de la columna (sin `tv`).
+   * @param id - ID del usuario
+   * @returns Mensaje de confirmación
+   * @throws NotFoundException si el usuario no existe
+   */
+  async revokeSessions(id: string): Promise<{ message: string }> {
+    await this.findOne(id);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+
+    return { message: 'Sesiones revocadas correctamente' };
   }
 }

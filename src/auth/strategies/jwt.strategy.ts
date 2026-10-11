@@ -13,7 +13,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }
 
@@ -26,12 +26,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return null;
     }
 
-    return { 
-      id: payload.sub, 
-      email: payload.email,
-      role: payload.role,
+    // Revocación backward-compatible: los tokens emitidos antes de `tokenVersion`
+    // no traen `tv` y se aceptan (frontend existente sigue funcionando).
+    // Solo se rechaza cuando el token trae `tv` y no coincide con la BD
+    // (logout o revocación posterior a su emisión).
+    if (payload.tv !== undefined && payload.tv !== (user.tokenVersion ?? 0)) {
+      return null;
+    }
+
+    // El rol SIEMPRE se lee de la base de datos, nunca del token:
+    // así un ADMIN degradado a TECHNICIAN pierde permisos de inmediato,
+    // sin esperar a que venza el JWT.
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
       firstName: user.firstName,
-      lastName: user.lastName
+      lastName: user.lastName,
     };
   }
 }

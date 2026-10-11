@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '@prisma/client';
+import { toAmount } from '../../common/utils/price.utils';
 
 export class SaleItemResponseDto {
   @ApiProperty()
@@ -8,12 +9,11 @@ export class SaleItemResponseDto {
   @ApiProperty()
   saleId: string;
 
-  @ApiProperty()
-  productId: string;
+  @ApiProperty({ nullable: true })
+  productId?: string | null;
 
   @ApiProperty()
   quantity: number;
-
   @ApiProperty()
   price: number;
 
@@ -28,10 +28,17 @@ export class SaleItemResponseDto {
   productName: string;
 
   @ApiPropertyOptional()
-  productDescription?: string;
+  productDescription?: string | null;
 
-  constructor(partial: Partial<SaleItemResponseDto>) {
+  @ApiPropertyOptional({
+    description: 'Snapshot del ítem de servicio (presupuesto facturado)',
+  })
+  description?: string | null;
+
+  constructor(partial: Partial<SaleItemResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    // Prisma Decimal -> number (el esquema usa DECIMAL(10,2))
+    this.price = toAmount(this.price);
   }
 }
 
@@ -54,6 +61,16 @@ export class SaleResponseDto {
   @ApiProperty({ enum: PaymentMethod })
   paymentMethod: PaymentMethod;
 
+  @ApiPropertyOptional({
+    description: 'Presupuesto que originó la venta (cobro de quote)',
+  })
+  quoteId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Orden de reparación que origina el cobro',
+  })
+  repairOrderId?: string | null;
+
   @ApiProperty()
   createdAt: Date;
 
@@ -70,7 +87,11 @@ export class SaleResponseDto {
   @ApiPropertyOptional()
   customerFullName?: string;
 
-  constructor(partial: Partial<SaleResponseDto>) {
+  constructor(partial: Partial<SaleResponseDto> | Record<string, unknown>) {
     Object.assign(this, partial);
+    this.totalAmount = toAmount(this.totalAmount);
+    this.items = (Array.isArray(this.items) ? this.items : []).map(
+      (item) => new SaleItemResponseDto(item),
+    );
   }
 }

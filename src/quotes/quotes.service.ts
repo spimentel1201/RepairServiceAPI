@@ -1,13 +1,60 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateQuoteDto } from './dto/create-quote.dto';
+import { RepairOrdersService } from '../repair-orders/repair-orders.service';
+import { CreateQuoteDto, CreateQuoteItemDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 import { QuoteStatus } from '@prisma/client';
+import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
+import { Paged } from '../common/pagination/pagination.utils';
 
 @Injectable()
 export class QuotesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private repairOrders: RepairOrdersService,
+  ) {}
+
+  /**
+   * Transiciones de estado permitidas. INVOICED solo lo pone el cobro
+   * (`convert-to-sale`); una vez facturado el documento queda congelado.
+   */
+  private static readonly ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
+    [QuoteStatus.PENDING]: [QuoteStatus.APPROVED, QuoteStatus.REJECTED, QuoteStatus.EXPIRED],
+    [QuoteStatus.APPROVED]: [QuoteStatus.REJECTED, QuoteStatus.EXPIRED],
+    [QuoteStatus.REJECTED]: [QuoteStatus.PENDING],
+    [QuoteStatus.EXPIRED]: [QuoteStatus.PENDING],
+    [QuoteStatus.INVOICED]: [],
+  };
+
+  private assertTransition(from: QuoteStatus, to: QuoteStatus): void {
+    if (from === to) return;
+    const allowed = QuotesService.ALLOWED_TRANSITIONS[from] ?? [];
+    if (!allowed.includes(to)) {
+      throw new ConflictException(
+        `Transición de presupuesto no permitida: ${from} → ${to}`,
+      );
+    }
+  }
+
+  /**
+   * El total de un presupuesto siempre lo calcula el servidor a partir de sus
+   * ítems: `Σ (precio * cantidad)` redondeado a 2 decimales. El campo
+   * `totalAmount` que envie el cliente se ignora.
+   */
+  private calculateTotal(items: CreateQuoteItemDto[]): number {
+    return roundToTwoDecimals(
+      items.reduce(
+        (sum, item) => sum + toAmount(item.price) * item.quantity,
+        0,
+      ),
+    );
+  }
 
   /**
    * Crea un nuevo presupuesto
@@ -15,13 +62,29 @@ export class QuotesService {
    * @returns El presupuesto creado
    */
   async create(createQuoteDto: CreateQuoteDto): Promise<QuoteResponseDto> {
+    // Verificar que al menos hay un ítem
+    if (!createQuoteDto.items || createQuoteDto.items.length === 0) {
+      throw new BadRequestException(
+        'El presupuesto debe tener al menos un ítem',
+      );
+    }
+
+    // INVOICED solo lo pone el cobro (convert-to-sale), nunca la creación.
+    if (createQuoteDto.status === QuoteStatus.INVOICED) {
+      throw new BadRequestException(
+        'Un presupuesto no puede crearse como INVOICED: usa convert-to-sale',
+      );
+    }
+
     // Verificar si la orden de reparación existe
     const repairOrder = await this.prisma.repairOrder.findUnique({
       where: { id: createQuoteDto.repairOrderId },
     });
 
     if (!repairOrder) {
-      throw new NotFoundException(`Orden de reparación con ID ${createQuoteDto.repairOrderId} no encontrada`);
+      throw new NotFoundException(
+        `Orden de reparación con ID ${createQuoteDto.repairOrderId} no encontrada`,
+      );
     }
 
     // Verificar si el cliente existe
@@ -30,7 +93,9 @@ export class QuotesService {
     });
 
     if (!customer) {
-      throw new NotFoundException(`Cliente con ID ${createQuoteDto.customerId} no encontrado`);
+      throw new NotFoundException(
+        `Cliente con ID ${createQuoteDto.customerId} no encontrado`,
+      );
     }
 
     // Verificar si el técnico existe
@@ -39,61 +104,73 @@ export class QuotesService {
     });
 
     if (!technician) {
-      throw new NotFoundException(`Técnico con ID ${createQuoteDto.technicianId} no encontrado`);
+      throw new NotFoundException(
+        `Técnico con ID ${createQuoteDto.technicianId} no encontrado`,
+      );
     }
 
-    try {
-      // Crear el presupuesto con sus ítems en una transacción
-      const quote = await this.prisma.$transaction(async (prisma) => {
-        // Crear el presupuesto
-        const newQuote = await prisma.quote.create({
-          data: {
-            repairOrderId: createQuoteDto.repairOrderId,
-            customerId: createQuoteDto.customerId,
-            technicianId: createQuoteDto.technicianId,
-            status: createQuoteDto.status || QuoteStatus.PENDING,
-            totalAmount: createQuoteDto.totalAmount,
-            items: {
-              create: createQuoteDto.items.map(item => ({
-                quantity: item.quantity,
-                price: item.price,
-                description: item.description,
-              })),
-            },
+    // Crear el presupuesto con sus ítems en una transacción
+    const quote = await this.prisma.$transaction(async (prisma) => {
+      // Crear el presupuesto (total recalculado por el servidor)
+      const newQuote = await prisma.quote.create({
+        data: {
+          repairOrderId: createQuoteDto.repairOrderId,
+          customerId: createQuoteDto.customerId,
+          technicianId: createQuoteDto.technicianId,
+          status: createQuoteDto.status || QuoteStatus.PENDING,
+          totalAmount: this.calculateTotal(createQuoteDto.items),
+          items: {
+            create: createQuoteDto.items.map((item) => ({
+              quantity: item.quantity,
+              price: toAmount(item.price),
+              description: item.description,
+            })),
           },
-          include: {
-            items: true,
-          },
-        });
-
-        return newQuote;
+        },
+        include: {
+          items: true,
+        },
       });
 
-      return new QuoteResponseDto(quote);
-    } catch (error) {
-      throw new BadRequestException(`Error al crear el presupuesto: ${error.message}`);
+      return newQuote;
+    });
+
+    // Si nace aprobado, la orden refleja el cobro desde el inicio.
+    if (quote.status === QuoteStatus.APPROVED) {
+      await this.repairOrders.recalcBilling(quote.repairOrderId);
     }
+
+    return new QuoteResponseDto(quote);
   }
 
   /**
-   * Obtiene todos los presupuestos
-   * @returns Lista de presupuestos
+   * Obtiene una página de presupuestos
+   * @param params Paginación
+   * @returns Página de presupuestos y total de registros
    */
-  async findAll(): Promise<QuoteResponseDto[]> {
-    const quotes = await this.prisma.quote.findMany({
-      include: {
-        items: true,
-        repairOrder: {
-          include: {
-            items: true,
+  async findAll(
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<QuoteResponseDto>> {
+    const [quotes, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+          repairOrder: {
+            include: {
+              items: true,
+            },
           },
+          customer: true,
+          technician: true,
         },
-        customer: true,
-        technician: true,
-      },
-    });
+      }),
+      this.prisma.quote.count(),
+    ]);
 
-    return quotes.map(quote => new QuoteResponseDto(quote));
+    return { data: quotes.map((quote) => new QuoteResponseDto(quote)), total };
   }
 
   /**
@@ -124,35 +201,55 @@ export class QuotesService {
   }
 
   /**
-   * Obtiene todos los presupuestos de una orden de reparación
+   * Obtiene los presupuestos de una orden de reparación (paginado)
    * @param repairOrderId ID de la orden de reparación
-   * @returns Lista de presupuestos de la orden
+   * @param params Paginación opcional { skip, take }
+   * @returns Página + total (total viaja en `X-Total-Count`)
    */
-  async findByRepairOrder(repairOrderId: string): Promise<QuoteResponseDto[]> {
+  async findByRepairOrder(
+    repairOrderId: string,
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<QuoteResponseDto>> {
     const repairOrder = await this.prisma.repairOrder.findUnique({
       where: { id: repairOrderId },
     });
 
     if (!repairOrder) {
-      throw new NotFoundException(`Orden de reparación con ID ${repairOrderId} no encontrada`);
+      throw new NotFoundException(
+        `Orden de reparación con ID ${repairOrderId} no encontrada`,
+      );
     }
 
-    const quotes = await this.prisma.quote.findMany({
-      where: { repairOrderId },
-      include: {
-        items: true,
-      },
-    });
+    const where = { repairOrderId };
+    const [quotes, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+        },
+      }),
+      this.prisma.quote.count({ where }),
+    ]);
 
-    return quotes.map(quote => new QuoteResponseDto(quote));
+    return {
+      data: quotes.map((quote) => new QuoteResponseDto(quote)),
+      total,
+    };
   }
 
   /**
-   * Obtiene todos los presupuestos de un cliente
+   * Obtiene los presupuestos de un cliente (paginado)
    * @param customerId ID del cliente
-   * @returns Lista de presupuestos del cliente
+   * @param params Paginación opcional { skip, take }
+   * @returns Página + total (total viaja en `X-Total-Count`)
    */
-  async findByCustomer(customerId: string): Promise<QuoteResponseDto[]> {
+  async findByCustomer(
+    customerId: string,
+    params: { skip?: number; take?: number } = {},
+  ): Promise<Paged<QuoteResponseDto>> {
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
     });
@@ -161,14 +258,24 @@ export class QuotesService {
       throw new NotFoundException(`Cliente con ID ${customerId} no encontrado`);
     }
 
-    const quotes = await this.prisma.quote.findMany({
-      where: { customerId },
-      include: {
-        items: true,
-      },
-    });
+    const where = { customerId };
+    const [quotes, total] = await Promise.all([
+      this.prisma.quote.findMany({
+        where,
+        skip: params.skip,
+        take: params.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: true,
+        },
+      }),
+      this.prisma.quote.count({ where }),
+    ]);
 
-    return quotes.map(quote => new QuoteResponseDto(quote));
+    return {
+      data: quotes.map((quote) => new QuoteResponseDto(quote)),
+      total,
+    };
   }
 
   /**
@@ -177,9 +284,26 @@ export class QuotesService {
    * @param updateQuoteDto Datos para actualizar
    * @returns El presupuesto actualizado
    */
-  async update(id: string, updateQuoteDto: UpdateQuoteDto): Promise<QuoteResponseDto> {
+  async update(
+    id: string,
+    updateQuoteDto: UpdateQuoteDto,
+  ): Promise<QuoteResponseDto> {
     // Verificar si el presupuesto existe
-    await this.findOne(id);
+    const current = await this.prisma.quote.findUnique({ where: { id } });
+    if (!current) {
+      throw new NotFoundException(`Presupuesto con ID ${id} no encontrado`);
+    }
+
+    // Documento facturado = congelado (se corrige con nota, no editando).
+    if (current.status === QuoteStatus.INVOICED) {
+      throw new ConflictException(
+        'Un presupuesto INVOICED no puede editarse porque ya generó una venta',
+      );
+    }
+
+    if (updateQuoteDto.status) {
+      this.assertTransition(current.status, updateQuoteDto.status);
+    }
 
     // Verificar si la orden de reparación existe (si se proporciona)
     if (updateQuoteDto.repairOrderId) {
@@ -188,7 +312,9 @@ export class QuotesService {
       });
 
       if (!repairOrder) {
-        throw new NotFoundException(`Orden de reparación con ID ${updateQuoteDto.repairOrderId} no encontrada`);
+        throw new NotFoundException(
+          `Orden de reparación con ID ${updateQuoteDto.repairOrderId} no encontrada`,
+        );
       }
     }
 
@@ -199,7 +325,9 @@ export class QuotesService {
       });
 
       if (!customer) {
-        throw new NotFoundException(`Cliente con ID ${updateQuoteDto.customerId} no encontrado`);
+        throw new NotFoundException(
+          `Cliente con ID ${updateQuoteDto.customerId} no encontrado`,
+        );
       }
     }
 
@@ -210,67 +338,67 @@ export class QuotesService {
       });
 
       if (!technician) {
-        throw new NotFoundException(`Técnico con ID ${updateQuoteDto.technicianId} no encontrado`);
+        throw new NotFoundException(
+          `Técnico con ID ${updateQuoteDto.technicianId} no encontrado`,
+        );
       }
     }
 
-    try {
-      // Actualizar el presupuesto en una transacción
-      const updatedQuote = await this.prisma.$transaction(async (prisma) => {
-        // Si hay ítems nuevos, eliminar los existentes y crear los nuevos
-        if (updateQuoteDto.items && updateQuoteDto.items.length > 0) {
-          // Eliminar ítems existentes
-          await prisma.quoteItem.deleteMany({
-            where: { quoteId: id },
-          });
+    // Actualizar el presupuesto en una transacción
+    const updatedQuote = await this.prisma.$transaction(async (prisma) => {
+      // Si hay ítems nuevos, eliminar los existentes y crear los nuevos
+      if (updateQuoteDto.items && updateQuoteDto.items.length > 0) {
+        // Eliminar ítems existentes
+        await prisma.quoteItem.deleteMany({
+          where: { quoteId: id },
+        });
 
-          // Actualizar el presupuesto con los nuevos ítems
-          const quote = await prisma.quote.update({
-            where: { id },
-            data: {
-              repairOrderId: updateQuoteDto.repairOrderId,
-              customerId: updateQuoteDto.customerId,
-              technicianId: updateQuoteDto.technicianId,
-              status: updateQuoteDto.status,
-              totalAmount: updateQuoteDto.totalAmount,
-              items: {
-                create: updateQuoteDto.items.map(item => ({
-                  quantity: item.quantity,
-                  price: item.price,
-                  description: item.description,
-                })),
-              },
+        // Actualizar el presupuesto con los nuevos ítems (total recalculado)
+        return prisma.quote.update({
+          where: { id },
+          data: {
+            repairOrderId: updateQuoteDto.repairOrderId,
+            customerId: updateQuoteDto.customerId,
+            technicianId: updateQuoteDto.technicianId,
+            status: updateQuoteDto.status,
+            totalAmount: this.calculateTotal(updateQuoteDto.items),
+            items: {
+              create: updateQuoteDto.items.map((item) => ({
+                quantity: item.quantity,
+                price: toAmount(item.price),
+                description: item.description,
+              })),
             },
-            include: {
-              items: true,
-            },
-          });
+          },
+          include: {
+            items: true,
+          },
+        });
+      }
 
-          return quote;
-        } else {
-          // Si no hay ítems nuevos, solo actualizar los datos básicos
-          const quote = await prisma.quote.update({
-            where: { id },
-            data: {
-              repairOrderId: updateQuoteDto.repairOrderId,
-              customerId: updateQuoteDto.customerId,
-              technicianId: updateQuoteDto.technicianId,
-              status: updateQuoteDto.status,
-              totalAmount: updateQuoteDto.totalAmount,
-            },
-            include: {
-              items: true,
-            },
-          });
-
-          return quote;
-        }
+      // Si no hay ítems nuevos, solo actualizar los datos básicos
+      // (totalAmount no se toca: sigue siendo el calculado por el servidor)
+      return prisma.quote.update({
+        where: { id },
+        data: {
+          repairOrderId: updateQuoteDto.repairOrderId,
+          customerId: updateQuoteDto.customerId,
+          technicianId: updateQuoteDto.technicianId,
+          status: updateQuoteDto.status,
+        },
+        include: {
+          items: true,
+        },
       });
+    });
 
-      return new QuoteResponseDto(updatedQuote);
-    } catch (error) {
-      throw new BadRequestException(`Error al actualizar el presupuesto: ${error.message}`);
+    // El cobro de la orden depende del total vigente: cualquier cambio de
+    // estado o de ítems lo recalcula (recompute idempotente, sin duplicar).
+    if (updateQuoteDto.status || updateQuoteDto.items?.length) {
+      await this.repairOrders.recalcBilling(updatedQuote.repairOrderId);
     }
+
+    return new QuoteResponseDto(updatedQuote);
   }
 
   /**
@@ -279,23 +407,29 @@ export class QuotesService {
    * @param status Nuevo estado
    * @returns El presupuesto actualizado
    */
-  async updateStatus(id: string, status: QuoteStatus): Promise<QuoteResponseDto> {
+  async updateStatus(
+    id: string,
+    status: QuoteStatus,
+  ): Promise<QuoteResponseDto> {
     // Verificar si el presupuesto existe
-    await this.findOne(id);
-
-    try {
-      const updatedQuote = await this.prisma.quote.update({
-        where: { id },
-        data: { status },
-        include: {
-          items: true,
-        },
-      });
-
-      return new QuoteResponseDto(updatedQuote);
-    } catch (error) {
-      throw new BadRequestException(`Error al actualizar el estado del presupuesto: ${error.message}`);
+    const current = await this.prisma.quote.findUnique({ where: { id } });
+    if (!current) {
+      throw new NotFoundException(`Presupuesto con ID ${id} no encontrado`);
     }
+
+    this.assertTransition(current.status, status);
+
+    const updatedQuote = await this.prisma.quote.update({
+      where: { id },
+      data: { status },
+      include: {
+        items: true,
+      },
+    });
+
+    await this.repairOrders.recalcBilling(updatedQuote.repairOrderId);
+
+    return new QuoteResponseDto(updatedQuote);
   }
 
   /**
@@ -305,24 +439,29 @@ export class QuotesService {
    */
   async remove(id: string): Promise<{ message: string }> {
     // Verificar si el presupuesto existe
-    await this.findOne(id);
+    const current = await this.findOne(id);
 
-    try {
-      await this.prisma.$transaction(async (prisma) => {
-        // Eliminar los ítems del presupuesto
-        await prisma.quoteItem.deleteMany({
-          where: { quoteId: id },
-        });
+    if (current.status === QuoteStatus.INVOICED) {
+      throw new ConflictException(
+        'Un presupuesto INVOICED no puede eliminarse porque ya generó una venta',
+      );
+    }
 
-        // Eliminar el presupuesto
-        await prisma.quote.delete({
-          where: { id },
-        });
+    await this.prisma.$transaction(async (prisma) => {
+      // Eliminar los ítems del presupuesto
+      await prisma.quoteItem.deleteMany({
+        where: { quoteId: id },
       });
 
-      return { message: 'Presupuesto eliminado correctamente' };
-    } catch (error) {
-      throw new BadRequestException(`Error al eliminar el presupuesto: ${error.message}`);
-    }
+      // Eliminar el presupuesto
+      await prisma.quote.delete({
+        where: { id },
+      });
+    });
+
+    // El borrado puede bajar el total vigente de la orden.
+    await this.repairOrders.recalcBilling(current.repairOrderId);
+
+    return { message: 'Presupuesto eliminado correctamente' };
   }
 }
