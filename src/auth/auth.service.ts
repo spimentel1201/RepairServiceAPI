@@ -49,7 +49,13 @@ export class AuthService {
    * @returns Token de acceso y datos básicos del usuario
    */
   async login(user: any) {
-    const payload = { email: user.email, sub: user.id, role: user.role };
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      role: user.role,
+      // Versión de sesión: permite revocar sin afectar tokens viejos sin `tv`.
+      tv: user.tokenVersion ?? 0,
+    };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
@@ -115,9 +121,27 @@ export class AuthService {
       throw new UnauthorizedException('Invalid user');
     }
 
-    const payload = { email: user.email, sub: user.id, role: user.role };
+    const full = await this.usersService.findByEmail(user.email);
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      role: user.role,
+      tv: full?.tokenVersion ?? 0,
+    };
     return {
       access_token: this.jwtService.sign(payload),
     };
+  }
+
+  /**
+   * Cierra todas las sesiones del usuario incrementando `tokenVersion`.
+   * Los tokens emitidos antes (con `tv` menor) dejan de validar.
+   * Es opt-in: el frontend existente que nunca llama aquí no se ve afectado.
+   * @param userId - ID del usuario
+   * @returns Mensaje de confirmación
+   */
+  async logout(userId: string): Promise<{ message: string }> {
+    await this.usersService.revokeSessions(userId);
+    return { message: 'Sesiones cerradas correctamente' };
   }
 }

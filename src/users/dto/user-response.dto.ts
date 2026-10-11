@@ -18,6 +18,9 @@ export class UserResponseDto {
   @Exclude()
   password?: string;
 
+  @Exclude()
+  tokenVersion?: number;
+
   @Expose()
   firstName: string;
 
@@ -45,7 +48,8 @@ export class UserResponseDto {
   constructor(partial: Partial<UserResponseDto> & { password?: string }) {
     Object.assign(this, partial);
     // Doble capa de seguridad: aunque el interceptor no corra, el hash de la
-    // contraseña nunca se copia a la respuesta.
+    // contraseña y la versión de sesión nunca se copian a la respuesta.
     delete this.password;
+    delete this.tokenVersion;
   }
 }

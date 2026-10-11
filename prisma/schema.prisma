@@ -20,6 +20,10 @@ model User {
   phone     String
   role      Role     @default(TECHNICIAN)
   isActive    Boolean  @default(true)
+  // Versión de tokens: se incrementa al cerrar sesión / revocar sesiones.
+  // El JWT lleva `tv`; si no coincide, el token está revocado. Default 0 para
+  // que los tokens emitidos antes de esta columna sigan válidos (compat).
+  tokenVersion Int @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -44,4 +44,10 @@ export class AuthController {
   refreshToken(@CurrentUser() user) {
     return this.authService.refreshToken(user.id);
   }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(@CurrentUser() user) {
+    return this.authService.logout(user.id);
+  }
 }

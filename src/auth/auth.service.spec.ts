@@ -20,6 +20,7 @@ describe('AuthService', () => {
       findByEmail: jest.fn(),
       create: jest.fn(),
       findOne: jest.fn(),
+      revokeSessions: jest.fn(),
     };
     jwt = { sign: jest.fn().mockReturnValue('token-firmado') };
     config = {
@@ -105,6 +106,23 @@ describe('AuthService', () => {
         email: 'a@b.c',
         sub: 'u-1',
         role: Role.TECHNICIAN,
+        tv: 0,
+      });
+    });
+
+    it('login propaga tokenVersion al claim tv', async () => {
+      await service.login({
+        id: 'u-1',
+        email: 'a@b.c',
+        role: Role.TECHNICIAN,
+        tokenVersion: 3,
+      });
+
+      expect(jwt.sign).toHaveBeenCalledWith({
+        email: 'a@b.c',
+        sub: 'u-1',
+        role: Role.TECHNICIAN,
+        tv: 3,
       });
     });
 
@@ -121,8 +139,26 @@ describe('AuthService', () => {
         email: 'a@b.c',
         role: Role.TECHNICIAN,
       });
+      users.findByEmail.mockResolvedValue({
+        id: 'u-1',
+        email: 'a@b.c',
+        tokenVersion: 2,
+      });
       const result = await service.refreshToken('u-1');
       expect(result.access_token).toBe('token-firmado');
+      expect(jwt.sign).toHaveBeenCalledWith({
+        email: 'a@b.c',
+        sub: 'u-1',
+        role: Role.TECHNICIAN,
+        tv: 2,
+      });
+    });
+
+    it('logout revoca sesiones via usersService', async () => {
+      users.revokeSessions.mockResolvedValue({ message: 'ok' });
+      const result = await service.logout('u-1');
+      expect(users.revokeSessions).toHaveBeenCalledWith('u-1');
+      expect(result.message).toBeDefined();
     });
   });
 });

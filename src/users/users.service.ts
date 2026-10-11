@@ -224,4 +224,22 @@ export class UsersService {
 
     return { message: 'Password changed successfully' };
   }
+
+  /**
+   * Revoca todas las sesiones del usuario incrementando `tokenVersion`.
+   * No afecta a tokens emitidos antes de la columna (sin `tv`).
+   * @param id - ID del usuario
+   * @returns Mensaje de confirmación
+   * @throws NotFoundException si el usuario no existe
+   */
+  async revokeSessions(id: string): Promise<{ message: string }> {
+    await this.findOne(id);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+
+    return { message: 'Sesiones revocadas correctamente' };
+  }
 }

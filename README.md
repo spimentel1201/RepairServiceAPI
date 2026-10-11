@@ -63,6 +63,7 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 | `GET /health` | Estado de la API y de la BD (`SELECT 1`) | público |
 | `POST /auth/login` · `POST /auth/register` | Login y registro | público |
 | `GET /auth/profile` · `POST /auth/refresh` | Perfil y renovación de token | cualquiera |
+| `POST /auth/logout` | Cierra todas las sesiones (revoca JWT con `tv`) | cualquiera |
 | `GET/POST /products` · `GET /products/search` · `GET /products/categories` | Catálogo (crear: ADMIN) | ADMIN/TECH |
 | `PATCH /products/:id` · `PATCH /products/:id/stock` · `DELETE /products/:id` · `POST /products/import` | Gestión e importación CSV/Excel | ADMIN |
 | `GET/POST /customers` · `GET /customers/search` · `GET /customers/:id/history` | Clientes e historial | ADMIN/TECH |
@@ -78,6 +79,18 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 Todos los listados aceptan `?page&limit` y responden con la cabecera `X-Total-Count`.
 Esto incluye los scoped: `/quotes/customer/:id`, `/quotes/repair-order/:id`,
 `/repair-orders/customer/:id` y `/repair-orders/technician/:id`.
+
+### Sesiones y revocación (compatible con clientes existentes)
+
+- El JWT lleva `tv` (versión de sesión). `POST /auth/logout` y
+  `POST /users/:id/revoke-sessions` (ADMIN) incrementan `User.tokenVersion` e
+  invalidan los tokens con `tv` anterior.
+- **Compatibilidad:** los tokens emitidos antes de esta versión no traen `tv` y
+  siguen válidos hasta expirar. Ningún endpoint existente cambió su forma de
+  respuesta; `JWT_EXPIRATION` mantiene su defecto `1d`. No requiere cambios en
+  el frontend.
+- `change-password` NO revoca sesiones automáticamente; tras un reset, el ADMIN
+  puede llamar a `revoke-sessions` si lo necesita.
 
 ## Tests
 
@@ -123,7 +136,8 @@ Si la BD de producción se creó con `prisma db push` y no tiene `_prisma_migrat
 
 1. `npx prisma migrate resolve --applied 0_init` — marca el esquema actual como baseline.
 2. `npx prisma migrate deploy` — aplica `1_align_existing_database` (21 índices +
-   conversión de dinero a `DECIMAL(10,2)`; es idempotente).
+   conversión de dinero a `DECIMAL(10,2)`; es idempotente) y `2_token_version`
+   (`User.tokenVersion` con default 0; idempotente vía `IF NOT EXISTS`).
 3. `npx prisma migrate status` — debe decir que el esquema está al día.
 
 Si la BD tiene migraciones antiguas registradas que ya no existen en el repo, bórralas

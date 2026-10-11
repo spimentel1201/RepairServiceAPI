@@ -138,8 +138,7 @@ export class UsersController {
    */
   @Post(':id/change-password')
   @HttpCode(HttpStatus.OK)
-  changePassword(
-    @Param('id') id: string,
+  changePassword(    @Param('id') id: string,
     @Body() changePasswordDto: ChangePasswordDto,
     @CurrentUser() currentUser: { id: string; role: Role },
   ): Promise<{ message: string }> {
@@ -156,5 +155,17 @@ export class UsersController {
       // Solo el dueño del cuenta debe demostrar la contraseña actual.
       requireCurrentPassword: isSelf,
     });
+  }
+
+  /**
+   * Revoca todas las sesiones de un usuario (invalida sus JWT con `tv`).
+   * Opt-in: solo actúa si un ADMIN lo llama explícitamente.
+   * @access Solo administradores
+   */
+  @Post(':id/revoke-sessions')
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  revokeSessions(@Param('id') id: string): Promise<{ message: string }> {
+    return this.usersService.revokeSessions(id);
   }
 }
