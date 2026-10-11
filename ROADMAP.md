@@ -1,15 +1,18 @@
 # Roadmap — Trabajo pendiente
 
-> Estado al 09/10/2026. Los Sprints 1–3 están **completados, validados y pushados**
-> en sus ramas; falta integrarlos y hay un Sprint 4 planificado.
+> Estado al 11/10/2026. Los Sprints 1–3 están **completados, validados y pushados**
+> en sus ramas; falta integrarlos. El Sprint 4 está **implementado** en
+> `feat/sprint-4-hardening` (apilada sobre S3), pendiente de merge + deploy.
 >
 > | Rama | Contenido | Estado |
 > |---|---|---|
 > | `fix/sprint-1-security` | Guards globales, roles, registro→TECHNICIAN, Swagger condicional | ✅ pushada |
 > | `fix/sprint-2-data-integrity` | Decimal money, catálogo de precios, totals server-side, paginación, índices | ✅ pushada (migración ya aplicada en Neon) |
 > | `fix/sprint-3-hygiene` | ESLint/Prettier, `.env.example`, healthcheck, tests, CI, README, dotenv | ✅ pushada |
+> | `feat/sprint-4-hardening` | IGV configurable, paginación scoped, Swagger dual-route, strictNullChecks, revocación opt-in | ✅ implementada, sin mergear |
 >
-> Validación: smoke 46/46 · unit 55/55 · e2e 10/10 · build limpio.
+> Validación S4 local: `tsc --noEmit` limpio · unit 59/59 · build limpio.
+> e2e pendiente en CI (requiere Postgres; local apunta a Neon prod, no correr ahí).
 
 ## 1. Inmediato (cierre del trabajo ya hecho)
 
@@ -26,20 +29,14 @@
   (`.github/workflows/ci.yml`) se pushó por primera vez hoy; revisar la pestaña
   Actions y ajustar si algo falla (service de Postgres, seed, versiones de Node).
 
-## 2. Sprint 4 (planificado)
+## 2. Sprint 4 (implementado en `feat/sprint-4-hardening`)
 
-- [ ] **IGV configurable** — `0.18` hardcodeado en
-  `sales.service.generateInvoice`; moverlo a variable de entorno (ej. `IGV_RATE`).
-- [ ] **Paginación scoped** — `findByCustomer` / `findByTechnician`
-  (`/quotes/customer/:id`, `/repair-orders/technician/:id`, …) devuelven listas
-  sin `X-Total-Count` ni `page`/`limit`, a diferencia del resto de listados.
-- [ ] **Revocación de tokens** — el JWT es stateless: un token robado vale hasta
-  expirar. Evaluar blacklist (Redis/DB) o rotación de secret.
-- [ ] **`strictNullChecks`** en `tsconfig` (endurece el chequeo de nulos en todo
-  el proyecto; tocará ajustar código).
-- [ ] **`prisma.config.ts`** — formato de configuración nuevo de Prisma 6.
-- [ ] *(Opcional)* **Swagger bajo Vercel** — si en producción `https://<app>.vercel.app/api/docs`
-  da 404, es un desajuste de rutas del serverless; ajustar con ruta dual.
+- [x] **IGV configurable** — `IGV_RATE` (defecto `0.18`) en `sales.service.getIgvRate()`; `generateInvoice` descompone con la tasa. Tests en `sales.service.spec`.
+- [x] **Paginación scoped** — `findByCustomer` / `findByTechnician` / `findByRepairOrder` devuelven `Paged<T>` con `X-Total-Count` y `page`/`limit`, igual que el resto.
+- [x] **Revocación de tokens (opt-in, sin romper frontend)** — `User.tokenVersion` (migración `2_token_version`, default 0); `POST /auth/logout` + `POST /users/:id/revoke-sessions` (ADMIN). Tokens viejos sin `tv` siguen válidos; `change-password` no revoca solo; `JWT_EXPIRATION` intacto.
+- [x] **`strictNullChecks`** en `tsconfig` — activado y errores fijados (6 archivos: guards `??`/validación, DTOs aceptan `null` real de Prisma, arrays tipados en importador, `req.user` con 401 explícito).
+- [ ] **`prisma.config.ts`** — REVERTIDO tras probar: Prisma 6.13 no acepta `datasource` en `defineConfig` (`'datasource' does not exist in type 'PrismaConfig'`) y el archivo desactiva la carga automática del `.env` ("skipping environment variable loading"). Retomar al subir a Prisma 7. Sin impacto: solo queda el warning de `package.json#prisma` deprecado.
+- [x] *(Opcional)* **Swagger bajo Vercel** — alias `/docs` además de `/api/docs`; verificar en preview.
 
 ## 3. Higiene / decisiones del dueño del proyecto
 
