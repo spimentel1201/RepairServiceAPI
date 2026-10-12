@@ -17,7 +17,6 @@ import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
 import { ConvertQuoteToSaleDto } from '../sales/dto/convert-quote.dto';
 import { SaleResponseDto } from '../sales/dto/sale-response.dto';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { QuoteStatus } from '@prisma/client';
 import {
   ApiTags,
@@ -31,6 +30,7 @@ import {
 import { Response } from 'express';
 import { parsePagination } from '../common/pagination/pagination.utils';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 
 @ApiTags('quotes')
@@ -189,9 +189,10 @@ export class QuotesController {
   @Post(':id/convert-to-sale')
   @Roles(Role.ADMIN)
   @ApiOperation({
-    summary: 'Facturar un presupuesto aprobado (crea la venta y marca INVOICED)',
+    summary:
+      'Facturar un presupuesto aprobado (crea la venta y marca INVOICED)',
   })
-  @ApiParam({ name: 'id', description: 'ID del presupuesto APPROVED' })
+  @ApiParam({ name: 'id', description: 'ID del presupuesto APPROVED o PAID' })
   @ApiBody({ type: ConvertQuoteToSaleDto })
   @ApiResponse({
     status: 201,
@@ -206,7 +207,7 @@ export class QuotesController {
   @ApiResponse({
     status: 409,
     description:
-      'El presupuesto no está APPROVED o ya fue facturado (anti doble-cobro).',
+      'El presupuesto no está APPROVED/PAID o ya fue facturado (anti doble-cobro).',
   })
   convertToSale(
     @Param('id', ParseUUIDPipe) id: string,
@@ -232,16 +233,25 @@ export class QuotesController {
     description:
       'Presupuesto, orden de reparación, cliente o técnico no encontrado.',
   })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Presupuesto en estado bloqueado (APPROVED/PAID/EXPIRED) o transición de estado no permitida.',
+  })
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateQuoteDto: UpdateQuoteDto,
+    @CurrentUser() user: { id: string; role: Role },
   ): Promise<QuoteResponseDto> {
-    return this.quotesService.update(id, updateQuoteDto);
+    return this.quotesService.update(id, updateQuoteDto, user.role);
   }
 
   @Patch(':id/status')
   @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Actualizar el estado de un presupuesto' })
+  @ApiOperation({
+    summary:
+      'Actualizar el estado de un presupuesto (PENDING → APPROVED → PAID; al pagar, la orden pasa a COMPLETED)',
+  })
   @ApiParam({ name: 'id', description: 'ID del presupuesto' })
   @ApiBody({
     schema: {
@@ -260,13 +270,22 @@ export class QuotesController {
     description: 'El estado del presupuesto ha sido actualizado exitosamente.',
     type: QuoteResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Estado inválido o solicitud incorrecta.',
+  })
   @ApiResponse({ status: 404, description: 'Presupuesto no encontrado.' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Transición de estado no permitida o la orden ya tiene un presupuesto pagado.',
+  })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: QuoteStatus,
+    @CurrentUser() user: { id: string; role: Role },
   ): Promise<QuoteResponseDto> {
-    return this.quotesService.updateStatus(id, status);
+    return this.quotesService.updateStatus(id, status, user.role);
   }
 
   @Delete(':id')
@@ -288,6 +307,10 @@ export class QuotesController {
   })
   @ApiResponse({ status: 400, description: 'Solicitud incorrecta.' })
   @ApiResponse({ status: 404, description: 'Presupuesto no encontrado.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Presupuesto en estado final (APPROVED/PAID/EXPIRED).',
+  })
   remove(@Param('id', ParseUUIDPipe) id: string): Promise<{ message: string }> {
     return this.quotesService.remove(id);
   }

@@ -3,7 +3,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { PaymentMethod, QuoteStatus } from '@prisma/client';
+import { PaymentMethod, QuoteStatus, RepairOrderStatus } from '@prisma/client';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -46,6 +46,10 @@ describe('SalesService', () => {
         delete: jest.fn(),
       },
       saleItem: { deleteMany: jest.fn() },
+      repairOrder: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
       $transaction: jest.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
     };
     service = new SalesService(prisma as unknown as PrismaService);
@@ -290,6 +294,54 @@ describe('SalesService', () => {
       expect(result.quoteId).toBe('q-1');
       expect(result.items).toHaveLength(2);
       expect(result.items[0].productName).toBe('Mano de obra');
+    });
+
+    it('factura un PAID: el pago sin documento también genera venta', async () => {
+      const qtx = mockQuoteTx({ ...approvedQuote, status: QuoteStatus.PAID });
+      const result = await service.createFromQuote(
+        'q-1',
+        PaymentMethod.YAPE,
+        'u-1',
+      );
+
+      expect(qtx.sale.create).toHaveBeenCalled();
+      expect(qtx.quote.update).toHaveBeenCalledWith({
+        where: { id: 'q-1' },
+        data: { status: QuoteStatus.INVOICED },
+      });
+      expect(result.quoteId).toBe('q-1');
+    });
+
+    it('al facturar cierra la orden (COMPLETED + endDate)', async () => {
+      mockQuoteTx(approvedQuote);
+      prisma.repairOrder.findUnique.mockResolvedValue({
+        id: 'ro-1',
+        status: RepairOrderStatus.IN_PROGRESS,
+        endDate: null,
+      });
+
+      await service.createFromQuote('q-1', PaymentMethod.YAPE, 'u-1');
+
+      expect(prisma.repairOrder.update).toHaveBeenCalledWith({
+        where: { id: 'ro-1' },
+        data: {
+          status: RepairOrderStatus.COMPLETED,
+          endDate: expect.any(Date),
+        },
+      });
+    });
+
+    it('no toca una orden ya DELIVERED al facturar', async () => {
+      mockQuoteTx(approvedQuote);
+      prisma.repairOrder.findUnique.mockResolvedValue({
+        id: 'ro-1',
+        status: RepairOrderStatus.DELIVERED,
+        endDate: new Date('2026-01-01'),
+      });
+
+      await service.createFromQuote('q-1', PaymentMethod.YAPE, 'u-1');
+
+      expect(prisma.repairOrder.update).not.toHaveBeenCalled();
     });
 
     it('404 si el presupuesto no existe', async () => {

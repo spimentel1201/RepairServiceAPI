@@ -1,35 +1,32 @@
 # Roadmap — Trabajo pendiente
 
-> Estado al 11/10/2026. Los Sprints 1–3 están **completados, validados y pushados**
-> en sus ramas; falta integrarlos. El Sprint 4 está **implementado** en
-> `feat/sprint-4-hardening` (apilada sobre S3), pendiente de merge + deploy.
-> El Sprint 5 (cobro de presupuestos) está **implementado** en
-> `feat/sprint-5-quote-billing` (apilada sobre S4), pendiente de merge + deploy.
+> Estado al 12/10/2026. Los Sprints 1–5 están **en `main`** (PRs #10–#12,
+> ramas S1–S3 + `feat/sprint-4-hardening` + `feat/sprint-5-quote-billing`).
+> En `fix/sprint-3-hygiene` (rebaseada sobre `main`) quedó el ciclo de
+> presupuestos **unificado**: quote-to-cash de S5 + estado `PAID` (pago sin
+> documento), pendiente de merge — ver §4.
 >
 > | Rama | Contenido | Estado |
 > |---|---|---|
-> | `fix/sprint-1-security` | Guards globales, roles, registro→TECHNICIAN, Swagger condicional | ✅ pushada |
-> | `fix/sprint-2-data-integrity` | Decimal money, catálogo de precios, totals server-side, paginación, índices | ✅ pushada (migración ya aplicada en Neon) |
-> | `fix/sprint-3-hygiene` | ESLint/Prettier, `.env.example`, healthcheck, tests, CI, README, dotenv | ✅ pushada |
-> | `feat/sprint-4-hardening` | IGV configurable, paginación scoped, Swagger dual-route, strictNullChecks, revocación opt-in | ✅ implementada, sin mergear |
+> | `fix/sprint-1-security` | Guards globales, roles, registro→TECHNICIAN, Swagger condicional | ✅ en `main` |
+> | `fix/sprint-2-data-integrity` | Decimal money, catálogo de precios, totals server-side, paginación, índices | ✅ en `main` (migración aplicada en Neon) |
+> | `fix/sprint-3-hygiene` | ESLint/Prettier, `.env.example`, healthcheck, tests, CI, README, dotenv + **`PAID` unificado con quote-to-cash** | ✅ pushada, pendiente de PR |
+> | `feat/sprint-4-hardening` | IGV configurable, paginación scoped, Swagger dual-route, strictNullChecks, revocación opt-in | ✅ en `main` |
+> | `feat/sprint-5-quote-billing` | Convert-to-sale, máquina de estados, `recalcBilling`, e2e quote-to-cash | ✅ en `main` |
 >
-> Validación S4 local: `tsc --noEmit` limpio · unit 59/59 · build limpio.
-> e2e pendiente en CI (requiere Postgres; local apunta a Neon prod, no correr ahí).
+> Validación local tras unificar: build limpio · ESLint 0 · unit 105/105.
+> e2e del flujo corre en CI (service `postgres:17`); local no: el `.env`
+> apunta a Neon prod y este entorno Windows no puede spawnear backends PG.
 
 ## 1. Inmediato (cierre del trabajo ya hecho)
 
-- [ ] **Crear y mergear los PRs** — nada está en `main` todavía. Las ramas van
-  apiladas, así que el orden es:
-  1. `fix/sprint-1-security` → `main`
-  2. `fix/sprint-2-data-integrity` → `main` (tras merge del 1)
-  3. `fix/sprint-3-hygiene` → `main` (tras merge del 2)
-- [ ] **Desplegar el Sprint 2+ a Vercel** — producción corre código pre-Sprint-2.
-  La BD ya está alineada (migración `1_align_existing_database` aplicada en Neon),
-  pero el código desplegado no usa los índices, `Decimal` para dinero, guards
-  globales ni paginación con `X-Total-Count`.
-- [ ] **Verificar la primera corrida del CI** — el workflow
-  (`.github/workflows/ci.yml`) se pushó por primera vez hoy; revisar la pestaña
-  Actions y ajustar si algo falla (service de Postgres, seed, versiones de Node).
+- [ ] **Mergear `fix/sprint-3-hygiene`** — único trabajo fuera de `main`
+  (ciclo `PAID` unificado; ver §4).
+- [ ] **Desplegar a Vercel** — producción corre sin S4/S5 ni `PAID`. Las
+  migraciones (`0`…`3_quote_billing` + `2_add_quote_paid_status`) ya están
+  aplicadas en Neon; falta publicar código.
+- [ ] **Verificar CI tras el merge** — e2e quote-to-cash con `postgres:17`:
+  revisar la pestaña Actions tras el push.
 
 ## 2. Sprint 4 (implementado en `feat/sprint-4-hardening`)
 
@@ -55,10 +52,38 @@
 - [x] **Migración `3_quote_billing`** — idempotente; aplicar en Neon con
   conexión directa. Nota: `ADD VALUE 'INVOICED'` requiere PG 12+ en
   transacción (Neon PG 17 OK; si falla, aplicar esa línea vía psql y reintentar).
-- Pendiente rutina: merge tras S4 + `migrate deploy` + deploy Vercel. e2e del
-  flujo corre en CI (4 tests nuevos).
+- ✅ Merged a `main` (PRs #10–#12); migraciones aplicadas en Neon.
+  Pendiente: deploy Vercel. e2e del flujo corre en CI.
+- Unificado con `PAID` en `fix/sprint-3-hygiene` — ver §4.
 
-## 4. Tras mergear S4–S5 (dueño del proyecto)
+## 4. Quote-to-cash unificado — `PAID` + `INVOICED` (`fix/sprint-3-hygiene`)
+
+> Complementa S5 sin pisarlo: S5 aporta la venta (`convert-to-sale` →
+> `INVOICED`) y esto añade el pago sin documento (`PAID`) por `PATCH
+> /quotes/:id/status`.
+
+- [x] **Ciclo completo** — `PENDING → APPROVED → (PAID) → INVOICED`.
+  `PAID` = pago registrado sin venta; `INVOICED` = venta generada (solo vía
+  `convert-to-sale`, que ahora acepta `APPROVED` **o** `PAID`).
+- [x] **Máquina de estados fusionada** — conserva todas las transiciones de
+  S5 (`APPROVED→REJECTED/EXPIRED`, `REJECTED|EXPIRED→PENDING`) y agrega
+  `APPROVED→PAID` + reversiones solo ADMIN (`APPROVED→PENDING`,
+  `PAID→APPROVED`). `PAID` e `INVOICED` no se alcanzan por creación.
+- [x] **Reflejo en la orden** — `recalcBilling` cuenta `APPROVED + PAID +
+  INVOICED` (si no, pagar dejaba el total en 0) y **ambos cobros cierran la
+  orden** (`COMPLETED` + `endDate`, salvo que ya esté `DELIVERED`): al
+  pagar por `payQuote` y al facturar en `createFromQuote`.
+- [x] **Congelados** — `PAID` e `INVOICED` no editan ni eliminan (corrigen
+  revirtiendo); `APPROVED`/`EXPIRED` mantienen las libertades de S5.
+- [x] **Un cobro vigente por orden** — `payQuote` rechaza pagar si otra
+  cotización de la orden está `PAID` o `INVOICED` (complementa el anti
+  doble-cobro `Sale.quoteId` único de S5).
+- [x] **Migración `2_add_quote_paid_status`** — idempotente, **ya aplicada
+  en Neon**; enum final `PENDING, APPROVED, PAID, REJECTED, EXPIRED,
+  INVOICED`.
+- Validación local: build · ESLint 0 · unit 105/105. e2e en CI.
+
+## 5. Tras mergear S4–S5 (dueño del proyecto)
 
 - [ ] **DB local para desarrollo** — el `.env` local apunta a **Neon producción**
   (`electrodb`); cualquier prueba local escribe en prod. Ejemplo rápido:

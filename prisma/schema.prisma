@@ -162,6 +162,7 @@ model Quote {
 enum QuoteStatus {
   PENDING
   APPROVED
+  PAID
   REJECTED
   EXPIRED
   INVOICED

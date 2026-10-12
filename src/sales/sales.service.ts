@@ -12,7 +12,12 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 import { UpdateSaleDto } from './dto/update-sale.dto';
 import { SaleResponseDto, SaleItemResponseDto } from './dto/sale-response.dto';
 import { SaleInvoiceDto, SaleInvoiceItemDto } from './dto/sale-invoice.dto';
-import { PaymentMethod, Prisma, QuoteStatus } from '@prisma/client';
+import {
+  PaymentMethod,
+  Prisma,
+  QuoteStatus,
+  RepairOrderStatus,
+} from '@prisma/client';
 import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
 import { Paged } from '../common/pagination/pagination.utils';
 
@@ -156,9 +161,7 @@ export class SalesService {
             create: createSaleDto.items.map((item) => {
               const product = productMap.get(item.productId);
               if (!product) {
-                throw new BadRequestException(
-                  'Uno o más productos no existen',
-                );
+                throw new BadRequestException('Uno o más productos no existen');
               }
               return {
                 productId: item.productId,
@@ -201,14 +204,14 @@ export class SalesService {
   }
 
   /**
-   * Factura un presupuesto aprobado: crea la venta desde sus ítems,
-   * marca el quote INVOICED y recalcula el cobro de la orden. Todo en una
-   * transacción (anti doble-cobro: `Sale.quoteId` es único).
+   * Factura un presupuesto aprobado o pagado: crea la venta desde sus ítems,
+   * marca el quote INVOICED, recalcula el cobro de la orden y la cierra.
+   * Todo en una transacción (anti doble-cobro: `Sale.quoteId` es único).
    *
    * Los ítems de servicio no tocan stock (sin productId); solo los ítems con
    * productId reservarían inventario (hoy los quotes no los traen).
    *
-   * @param quoteId ID del presupuesto APPROVED
+   * @param quoteId ID del presupuesto APPROVED o PAID
    * @param paymentMethod Método de pago del cobro
    * @param userId ID del usuario que cobra
    * @returns La venta creada
@@ -243,9 +246,12 @@ export class SalesService {
         );
       }
 
-      if (quote.status !== QuoteStatus.APPROVED) {
+      if (
+        quote.status !== QuoteStatus.APPROVED &&
+        quote.status !== QuoteStatus.PAID
+      ) {
         throw new ConflictException(
-          `Solo un presupuesto APPROVED puede facturarse (estado actual: ${quote.status})`,
+          `Solo un presupuesto APPROVED o PAID puede facturarse (estado actual: ${quote.status})`,
         );
       }
 
@@ -288,9 +294,25 @@ export class SalesService {
       return created;
     });
 
-    // La orden refleja el cobro (total vigente + avance a IN_PROGRESS).
+    // La orden refleja el cobro (total vigente + avance a IN_PROGRESS)...
     if (sale.repairOrderId) {
       await this.repairOrders?.recalcBilling(sale.repairOrderId);
+
+      // ...y facturar también cierra la orden: cobrar sin entrega previa
+      // significa que el trabajo terminó (una DELIVERED ya estaba cerrada).
+      const order = await this.prisma.repairOrder.findUnique({
+        where: { id: sale.repairOrderId },
+        select: { id: true, status: true, endDate: true },
+      });
+      if (order && order.status !== RepairOrderStatus.DELIVERED) {
+        await this.prisma.repairOrder.update({
+          where: { id: order.id },
+          data: {
+            status: RepairOrderStatus.COMPLETED,
+            endDate: order.endDate ?? new Date(),
+          },
+        });
+      }
     }
 
     return this.toResponseDto(sale);
@@ -402,8 +424,7 @@ export class SalesService {
           ...item,
           productName:
             item.product?.name ?? item.description ?? 'Ítem de servicio',
-          productDescription:
-            item.product?.description ?? item.description,
+          productDescription: item.product?.description ?? item.description,
         }),
     );
 
@@ -457,8 +478,7 @@ export class SalesService {
         new SaleInvoiceItemDto({
           productName:
             item.product?.name ?? item.description ?? 'Ítem de servicio',
-          productDescription:
-            item.product?.description ?? item.description,
+          productDescription: item.product?.description ?? item.description,
           quantity: item.quantity,
           unitPrice: toAmount(item.price),
           totalPrice: roundToTwoDecimals(toAmount(item.price) * item.quantity),
@@ -539,8 +559,7 @@ export class SalesService {
           ...item,
           productName:
             item.product?.name ?? item.description ?? 'Ítem de servicio',
-          productDescription:
-            item.product?.description ?? item.description,
+          productDescription: item.product?.description ?? item.description,
         }),
     );
 
