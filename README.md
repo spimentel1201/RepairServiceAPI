@@ -77,6 +77,7 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 | `GET /sales?quoteId=` · `GET /sales?repairOrderId=` | Ventas de un presupuesto / orden | ADMIN/TECH |
 | `PATCH /sales/:id` · `DELETE /sales/:id` | Gestión de ventas | ADMIN |
 | `GET/POST /users` · `PATCH/DELETE /users/:id` · `POST /users/:id/change-password` | Usuarios | ADMIN |
+| `POST /labels/extract` | OCR de etiquetas con Gemini Vision (JSON: `imageBase64`, `mimeType`, `ocrText?`) | ADMIN/TECH |
 
 Todos los listados aceptan `?page&limit` y responden con la cabecera `X-Total-Count`.
 Esto incluye los scoped: `/quotes/customer/:id`, `/quotes/repair-order/:id`,
@@ -118,6 +119,17 @@ Reglas:
 - Los ítems de servicio no mueven stock (sin `productId`); al eliminar una
   venta solo se restaura stock de ítems con producto.
 - `GET /sales/:id/invoice` factura esos ítems con su snapshot de descripción.
+
+### OCR de etiquetas (`POST /labels/extract`)
+
+Extrae `deviceType`, `brand`, `model` y `serialNumber` de la foto de una
+etiqueta usando Gemini Vision (`gemini-flash-lite-latest`). Entrada JSON
+(`imageBase64` sin prefijo `data:`, `mimeType`, `ocrText?` opcional como hint);
+MIME whitelist `jpeg/png/webp/heic` (`image/jpg` se normaliza) e imagen
+decodificada ≤ 5 MB (400 si no cumple). Responde siempre strings (`''` si no
+se detectó) más el objeto `parsed`. Reintenta 429/503 con backoff; sin
+`GEMINI_API_KEY` responde 500 (la API arranca igual sin ella). El límite JSON
+está en `10mb` para que el base64 no dé 413.
 
 ## Tests
 

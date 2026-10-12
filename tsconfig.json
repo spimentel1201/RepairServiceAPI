@@ -22,5 +22,11 @@
     "node_modules",
     "dist",
     "prisma"
+  ],
+  // Solo src: fija rootDir en src para que `nest build` emita dist/main.js
+  // (con test/ incluido, el root común sería ./ y saldría dist/src/main.js,
+  // que api/index.js no encuentra). ts-jest compila los specs por su cuenta.
+  "include": [
+    "src/**/*"
   ]
 }
