@@ -230,12 +230,8 @@ export class SalesService {
         );
       }
 
-      if (quote.status !== QuoteStatus.APPROVED) {
-        throw new ConflictException(
-          `Solo un presupuesto APPROVED puede facturarse (estado actual: ${quote.status})`,
-        );
-      }
-
+      // Anti doble-cobro primero: si ya hay venta, el mensaje nombra la venta
+      // existente (más preciso que el error de estado, que también es 409).
       const existing = await prisma.sale.findUnique({
         where: { quoteId },
         select: { id: true },
@@ -244,6 +240,12 @@ export class SalesService {
       if (existing) {
         throw new ConflictException(
           `El presupuesto ya fue facturado (venta ${existing.id})`,
+        );
+      }
+
+      if (quote.status !== QuoteStatus.APPROVED) {
+        throw new ConflictException(
+          `Solo un presupuesto APPROVED puede facturarse (estado actual: ${quote.status})`,
         );
       }
 
