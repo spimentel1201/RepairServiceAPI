@@ -5,6 +5,7 @@ import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { json } from 'express';
 import { AppModule } from './app.module';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
@@ -61,6 +62,11 @@ export function assertRequiredEnv(env: NodeJS.ProcessEnv = process.env): void {
  * y el handler serverless de Vercel (export default).
  */
 export function configureApp(app: INestApplication): void {
+  // Límite JSON elevado: /labels/extract recibe imágenes en base64
+  // (hasta 5 MB decodificados ≈ 6.8 MB de JSON). El defecto de Express
+  // (100kb) devolvería 413 antes de llegar al controlador.
+  app.use(json({ limit: '10mb' }));
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

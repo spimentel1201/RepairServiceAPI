@@ -12,6 +12,7 @@ import { RepairOrdersModule } from './repair-orders/repair-orders.module';
 import { QuotesModule } from './quotes/quotes.module';
 import { SalesModule } from './sales/sales.module';
 import { AuthModule } from './auth/auth.module';
+import { LabelsModule } from './labels/labels.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { AppThrottlerModule } from './throttler/throttler.module';
@@ -30,6 +31,7 @@ import { HealthModule } from './health/health.module';
     QuotesModule,
     SalesModule,
     AuthModule,
+    LabelsModule,
     AppThrottlerModule,
     HealthModule,
   ],
