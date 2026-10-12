@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateRepairOrderDto,
@@ -212,6 +216,7 @@ export class RepairOrdersService {
       billableQuotes: repairOrder.quotes.filter(
         (q) =>
           q.status === QuoteStatus.APPROVED ||
+          q.status === QuoteStatus.PAID ||
           q.status === QuoteStatus.INVOICED,
       ).length,
       pendingQuotes: repairOrder.quotes.filter(
@@ -332,7 +337,9 @@ export class RepairOrdersService {
     const billable = await db.quote.findMany({
       where: {
         repairOrderId: orderId,
-        status: { in: [QuoteStatus.APPROVED, QuoteStatus.INVOICED] },
+        status: {
+          in: [QuoteStatus.APPROVED, QuoteStatus.PAID, QuoteStatus.INVOICED],
+        },
       },
       select: { totalAmount: true },
     });
@@ -366,6 +373,23 @@ export class RepairOrdersService {
   ): Promise<RepairOrderResponseDto> {
     // Orden actual: verifica existencia y aporta el costo de revision vigente
     const current = await this.findOne(id);
+
+    // Presupuesto pagado: bloquea cambios que alteren dinero (ítems/costo de
+    // revisión); además totalCost queda fijado por el pago y no se recalcula.
+    const paidQuote = await this.prisma.quote.findFirst({
+      where: { repairOrderId: id, status: QuoteStatus.PAID },
+      select: { id: true },
+    });
+    const hasPaidQuote = paidQuote !== null;
+    if (
+      hasPaidQuote &&
+      ((updateRepairOrderDto.items && updateRepairOrderDto.items.length > 0) ||
+        updateRepairOrderDto.initialReviewCost !== undefined)
+    ) {
+      throw new ConflictException(
+        'La orden tiene un presupuesto pagado: los ítems y el costo de revisión quedan bloqueados',
+      );
+    }
 
     // Verificar si el cliente existe (si se proporciona)
     if (updateRepairOrderDto.customerId) {
@@ -423,7 +447,9 @@ export class RepairOrdersService {
             description: updateRepairOrderDto.description,
             notes: updateRepairOrderDto.notes,
             initialReviewCost,
-            totalCost: roundToTwoDecimals(initialReviewCost + itemsTotal),
+            totalCost: hasPaidQuote
+              ? current.totalCost
+              : roundToTwoDecimals(initialReviewCost + itemsTotal),
             // Si el estado cambia a COMPLETED, establecer la fecha de finalización
             endDate:
               updateRepairOrderDto.status === RepairOrderStatus.COMPLETED
@@ -440,7 +466,8 @@ export class RepairOrdersService {
       }
 
       // Si no hay items nuevos, solo actualizar los datos básicos.
-      // totalCost se recalcula por si cambio el costo de revision inicial.
+      // totalCost se recalcula por si cambio el costo de revision inicial,
+      // salvo que un presupuesto pagado lo haya fijado (no se pisa).
       const itemsTotal = current.items.reduce(
         (sum, item) => sum + item.price * item.quantity,
         0,
@@ -455,7 +482,9 @@ export class RepairOrdersService {
           description: updateRepairOrderDto.description,
           notes: updateRepairOrderDto.notes,
           initialReviewCost,
-          totalCost: roundToTwoDecimals(initialReviewCost + itemsTotal),
+          totalCost: hasPaidQuote
+            ? current.totalCost
+            : roundToTwoDecimals(initialReviewCost + itemsTotal),
           // Si el estado cambia a COMPLETED, establecer la fecha de finalización
           endDate:
             updateRepairOrderDto.status === RepairOrderStatus.COMPLETED

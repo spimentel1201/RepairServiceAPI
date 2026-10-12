@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { QuoteStatus, RepairOrderStatus } from '@prisma/client';
 import { RepairOrdersService } from './repair-orders.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,11 +12,24 @@ describe('RepairOrdersService (totales y normalizacion de items)', () => {
     tx = {
       repairOrder: {
         create: jest.fn().mockResolvedValue({ id: 'ro-1', items: [] }),
+        update: jest.fn().mockResolvedValue({ id: 'ro-1' }),
       },
     };
     prisma = {
       customer: { findUnique: jest.fn().mockResolvedValue({ id: 'c-1' }) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
+      quote: { findFirst: jest.fn().mockResolvedValue(null) },
+      repairOrder: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'ro-1',
+          status: 'IN_PROGRESS',
+          totalCost: 100,
+          initialReviewCost: 10,
+          items: [],
+          quotes: [],
+          sales: [],
+        }),
+      },
       $transaction: jest.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
     };
     service = new RepairOrdersService(prisma as unknown as PrismaService);
@@ -88,19 +101,20 @@ describe('RepairOrdersService (totales y normalizacion de items)', () => {
         update: jest.fn().mockResolvedValue({}),
       };
       prisma.quote = {
-        findMany: jest.fn().mockResolvedValue([
-          { totalAmount: 100 },
-          { totalAmount: 50.5 },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ totalAmount: 100 }, { totalAmount: 50.5 }]),
       };
     });
 
-    it('suma APPROVED+INVOICED y avanza RECEIVED → IN_PROGRESS', async () => {
+    it('suma APPROVED+PAID+INVOICED y avanza RECEIVED → IN_PROGRESS', async () => {
       await service.recalcBilling('ro-1');
       expect(prisma.quote.findMany).toHaveBeenCalledWith({
         where: {
           repairOrderId: 'ro-1',
-          status: { in: [QuoteStatus.APPROVED, QuoteStatus.INVOICED] },
+          status: {
+            in: [QuoteStatus.APPROVED, QuoteStatus.PAID, QuoteStatus.INVOICED],
+          },
         },
         select: { totalAmount: true },
       });
@@ -129,5 +143,41 @@ describe('RepairOrdersService (totales y normalizacion de items)', () => {
         NotFoundException,
       );
     });
+  });
+
+  // ---- Orden con presupuesto pagado ----
+
+  it('rechaza modificar items cuando hay un presupuesto pagado', async () => {
+    prisma.quote.findFirst.mockResolvedValue({
+      id: 'q-1',
+      status: QuoteStatus.PAID,
+    });
+    await expect(service.update('ro-1', baseDto())).rejects.toThrow(
+      ConflictException,
+    );
+  });
+
+  it('rechaza cambiar el costo de revision con presupuesto pagado', async () => {
+    prisma.quote.findFirst.mockResolvedValue({
+      id: 'q-1',
+      status: QuoteStatus.PAID,
+    });
+    await expect(
+      service.update('ro-1', { initialReviewCost: 99 } as any),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('sin cambios de dinero, no pisa el totalCost fijado por el pago', async () => {
+    prisma.quote.findFirst.mockResolvedValue({
+      id: 'q-1',
+      status: QuoteStatus.PAID,
+    });
+    await service.update('ro-1', { notes: 'cliente llamado' } as any);
+    expect(tx.repairOrder.update.mock.calls[0][0].data.totalCost).toBe(100);
+  });
+
+  it('sin presupuesto pagado, totalCost sigue recalculandose', async () => {
+    await service.update('ro-1', { initialReviewCost: 20 } as any);
+    expect(tx.repairOrder.update.mock.calls[0][0].data.totalCost).toBe(20);
   });
 });

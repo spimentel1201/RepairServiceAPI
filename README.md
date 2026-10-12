@@ -71,7 +71,7 @@ y falla con un mensaje claro si faltan. Referencia completa y comentada en [`.en
 | `GET/POST /repair-orders` · `GET /repair-orders/customer/:id` · `GET /repair-orders/technician/:id` | Órdenes de reparación | ADMIN/TECH |
 | `PATCH /repair-orders/:id/status` · `DELETE /repair-orders/:id` | Estados y borrado | ADMIN |
 | `GET/POST /quotes` · `GET /quotes/repair-order/:id` · `GET /quotes/customer/:id` | Cotizaciones (crear: ADMIN) | ADMIN/TECH |
-| `POST /quotes/:id/convert-to-sale` | Factura un APPROVED: crea la venta, marca INVOICED, sincroniza la orden | ADMIN |
+| `POST /quotes/:id/convert-to-sale` | Factura un APPROVED o PAID: crea la venta, marca INVOICED, cierra la orden | ADMIN |
 | `PATCH /quotes/:id/status` · `POST /quotes/:id/send-email` · `GET /quotes/:id/whatsapp-link` | Flujo comercial | ADMIN |
 | `GET/POST /sales` · `GET /sales/:id` · `GET /sales/:id/invoice` | Ventas e factura (IGV 18%) | ADMIN/TECH |
 | `GET /sales?quoteId=` · `GET /sales?repairOrderId=` | Ventas de un presupuesto / orden | ADMIN/TECH |
@@ -97,25 +97,38 @@ Esto incluye los scoped: `/quotes/customer/:id`, `/quotes/repair-order/:id`,
 
 ### Cobro de presupuestos (quote → venta)
 
-Flujo: `PENDING → APPROVED → INVOICED`.
+Flujo: `PENDING → APPROVED → (PAID) → INVOICED`.
 
 1. El técnico cotiza (`POST /quotes`, estado `PENDING`).
 2. Al aprobar (`PATCH /quotes/:id/status` → `APPROVED`), la orden recalcula
-   `totalCost` = Σ quotes `APPROVED`+`INVOICED` y avanza a `IN_PROGRESS`
+   `totalCost` = Σ quotes `APPROVED`+`PAID`+`INVOICED` y avanza a `IN_PROGRESS`
    (si seguía en `RECEIVED`/`DIAGNOSED`).
-3. Al cobrar (`POST /quotes/:id/convert-to-sale` con `paymentMethod`), se crea
-   la venta con los ítems del presupuesto, el quote pasa a `INVOICED` y la
-   orden se recalcula. Todo en una transacción.
+3. El pago se registra de dos formas:
+   - **Sin documento** — `PATCH /quotes/:id/status` → `PAID` (ADMIN):
+     recalcula el total de la orden y la cierra (`COMPLETED` + `endDate`,
+     salvo que ya esté `DELIVERED`).
+   - **Con venta** — `POST /quotes/:id/convert-to-sale` con `paymentMethod`
+     (desde `APPROVED` o `PAID`): crea la venta con los ítems del presupuesto,
+     el quote pasa a `INVOICED`, la orden se recalcula **y también se cierra**.
+     Todo en una transacción.
 4. La orden muestra el cobro en `GET /repair-orders/:id` → `billing`
    (`billedTotal`, `salesCount`, `billableQuotes`, `pendingQuotes`); las ventas
    se listan con `GET /sales?repairOrderId=`.
 
 Reglas:
 
-- Solo `APPROVED` se factura; doble cobro → `409` (`Sale.quoteId` único).
-- `INVOICED` congela el documento: no se edita ni elimina (409).
+- **Un cobro vigente por orden** — no se puede pagar si otra cotización de la
+  orden está `PAID`/`INVOICED` → `409`; doble factura del mismo quote → `409`
+  (`Sale.quoteId` único).
+- `PAID` e `INVOICED` congelan el documento: no se edita ni elimina (409) y
+  no se crean así; se corrigen revirtiendo el estado (solo ADMIN:
+  `PAID→APPROVED`).
+- `APPROVED` y `EXPIRED` siguen siendo editables/reversibles (al editar, la
+  orden recalcula su total).
 - Transiciones válidas: `PENDING→APPROVED/REJECTED/EXPIRED`,
-  `APPROVED→REJECTED/EXPIRED`, `REJECTED/EXPIRED→PENDING` (re-cotizar).
+  `APPROVED→PAID/REJECTED/EXPIRED`, `REJECTED/EXPIRED→PENDING` (re-cotizar);
+  `PAID` solo avanza a `INVOICED` vía `convert-to-sale` y `INVOICED` es
+  terminal.
 - Los ítems de servicio no mueven stock (sin `productId`); al eliminar una
   venta solo se restaura stock de ítems con producto.
 - `GET /sales/:id/invoice` factura esos ítems con su snapshot de descripción.

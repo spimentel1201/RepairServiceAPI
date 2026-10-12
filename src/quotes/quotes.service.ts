@@ -9,9 +9,48 @@ import { RepairOrdersService } from '../repair-orders/repair-orders.service';
 import { CreateQuoteDto, CreateQuoteItemDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { QuoteResponseDto } from './dto/quote-response.dto';
-import { QuoteStatus } from '@prisma/client';
+import { QuoteStatus, RepairOrderStatus, Role } from '@prisma/client';
 import { roundToTwoDecimals, toAmount } from '../common/utils/price.utils';
 import { Paged } from '../common/pagination/pagination.utils';
+
+/**
+ * Máquina de transiciones de estados del presupuesto (ciclo quote-to-cash):
+ * PENDING → APPROVED → (PAID) → INVOICED. PAID registra un pago sin
+ * documento; INVOICED solo lo pone el cobro (`convert-to-sale`) y es
+ * terminal. REJECTED y EXPIRED se reabren a PENDING.
+ */
+const ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
+  [QuoteStatus.PENDING]: [
+    QuoteStatus.APPROVED,
+    QuoteStatus.REJECTED,
+    QuoteStatus.EXPIRED,
+  ],
+  [QuoteStatus.APPROVED]: [
+    QuoteStatus.PAID,
+    QuoteStatus.REJECTED,
+    QuoteStatus.EXPIRED,
+  ],
+  [QuoteStatus.PAID]: [],
+  [QuoteStatus.REJECTED]: [QuoteStatus.PENDING],
+  [QuoteStatus.EXPIRED]: [QuoteStatus.PENDING],
+  [QuoteStatus.INVOICED]: [],
+};
+
+/**
+ * Reversiones permitidas solo a un ADMIN (corrección de errores):
+ * deshacer una aprobación o deshacer un pago registrado.
+ */
+const ADMIN_REVERSALS: Record<QuoteStatus, QuoteStatus[]> = {
+  [QuoteStatus.PENDING]: [],
+  [QuoteStatus.APPROVED]: [QuoteStatus.PENDING],
+  [QuoteStatus.REJECTED]: [],
+  [QuoteStatus.EXPIRED]: [],
+  [QuoteStatus.PAID]: [QuoteStatus.APPROVED],
+  [QuoteStatus.INVOICED]: [],
+};
+
+/** Estados cobrados: el documento queda congelado (solo lectura). */
+const LOCKED_STATES: QuoteStatus[] = [QuoteStatus.PAID, QuoteStatus.INVOICED];
 
 @Injectable()
 export class QuotesService {
@@ -19,28 +58,6 @@ export class QuotesService {
     private prisma: PrismaService,
     private repairOrders: RepairOrdersService,
   ) {}
-
-  /**
-   * Transiciones de estado permitidas. INVOICED solo lo pone el cobro
-   * (`convert-to-sale`); una vez facturado el documento queda congelado.
-   */
-  private static readonly ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
-    [QuoteStatus.PENDING]: [QuoteStatus.APPROVED, QuoteStatus.REJECTED, QuoteStatus.EXPIRED],
-    [QuoteStatus.APPROVED]: [QuoteStatus.REJECTED, QuoteStatus.EXPIRED],
-    [QuoteStatus.REJECTED]: [QuoteStatus.PENDING],
-    [QuoteStatus.EXPIRED]: [QuoteStatus.PENDING],
-    [QuoteStatus.INVOICED]: [],
-  };
-
-  private assertTransition(from: QuoteStatus, to: QuoteStatus): void {
-    if (from === to) return;
-    const allowed = QuotesService.ALLOWED_TRANSITIONS[from] ?? [];
-    if (!allowed.includes(to)) {
-      throw new ConflictException(
-        `Transición de presupuesto no permitida: ${from} → ${to}`,
-      );
-    }
-  }
 
   /**
    * El total de un presupuesto siempre lo calcula el servidor a partir de sus
@@ -66,13 +83,6 @@ export class QuotesService {
     if (!createQuoteDto.items || createQuoteDto.items.length === 0) {
       throw new BadRequestException(
         'El presupuesto debe tener al menos un ítem',
-      );
-    }
-
-    // INVOICED solo lo pone el cobro (convert-to-sale), nunca la creación.
-    if (createQuoteDto.status === QuoteStatus.INVOICED) {
-      throw new BadRequestException(
-        'Un presupuesto no puede crearse como INVOICED: usa convert-to-sale',
       );
     }
 
@@ -109,6 +119,19 @@ export class QuotesService {
       );
     }
 
+    // PAID e INVOICED son eventos de cobro: no se crean directamente (el
+    // pago va por PATCH /:id/status y el cobro por convert-to-sale). Un
+    // presupuesto puede nacer PENDING o, para migraciones, APPROVED.
+    const initialStatus = createQuoteDto.status ?? QuoteStatus.PENDING;
+    if (
+      initialStatus === QuoteStatus.PAID ||
+      initialStatus === QuoteStatus.INVOICED
+    ) {
+      throw new BadRequestException(
+        'Un presupuesto no puede crearse como PAID o INVOICED: usa PATCH /quotes/:id/status o convert-to-sale',
+      );
+    }
+
     // Crear el presupuesto con sus ítems en una transacción
     const quote = await this.prisma.$transaction(async (prisma) => {
       // Crear el presupuesto (total recalculado por el servidor)
@@ -117,7 +140,7 @@ export class QuotesService {
           repairOrderId: createQuoteDto.repairOrderId,
           customerId: createQuoteDto.customerId,
           technicianId: createQuoteDto.technicianId,
-          status: createQuoteDto.status || QuoteStatus.PENDING,
+          status: initialStatus,
           totalAmount: this.calculateTotal(createQuoteDto.items),
           items: {
             create: createQuoteDto.items.map((item) => ({
@@ -287,22 +310,26 @@ export class QuotesService {
   async update(
     id: string,
     updateQuoteDto: UpdateQuoteDto,
+    role: Role = Role.ADMIN,
   ): Promise<QuoteResponseDto> {
-    // Verificar si el presupuesto existe
-    const current = await this.prisma.quote.findUnique({ where: { id } });
-    if (!current) {
-      throw new NotFoundException(`Presupuesto con ID ${id} no encontrado`);
-    }
+    const existing = await this.findOne(id);
 
-    // Documento facturado = congelado (se corrige con nota, no editando).
-    if (current.status === QuoteStatus.INVOICED) {
+    // Documentos cobrados (PAID/INVOICED) = congelados: se corrigen
+    // revirtiendo el estado, no editando el documento.
+    if (LOCKED_STATES.includes(existing.status)) {
       throw new ConflictException(
-        'Un presupuesto INVOICED no puede editarse porque ya generó una venta',
+        existing.status === QuoteStatus.INVOICED
+          ? 'Un presupuesto INVOICED no puede editarse porque ya generó una venta'
+          : `El presupuesto está en estado ${existing.status} y no puede modificarse; revierta el estado primero`,
       );
     }
 
-    if (updateQuoteDto.status) {
-      this.assertTransition(current.status, updateQuoteDto.status);
+    // Si viene un estado nuevo, debe ser una transición válida
+    if (
+      updateQuoteDto.status !== undefined &&
+      updateQuoteDto.status !== existing.status
+    ) {
+      this.assertTransition(existing.status, updateQuoteDto.status, role);
     }
 
     // Verificar si la orden de reparación existe (si se proporciona)
@@ -402,22 +429,45 @@ export class QuotesService {
   }
 
   /**
-   * Actualiza el estado de un presupuesto
+   * Actualiza el estado de un presupuesto validando la máquina de
+   * transiciones (ALLOWED_TRANSITIONS). Las reversiones desde estados
+   * finales solo las puede ejecutar un ADMIN.
+   *
+   * Al pasar a PAID el cambio se hace en una transacción que además:
+   * - garantiza que la orden tenga como máximo un cobro vigente;
+   * - recalcula el total de la orden (recalcBilling) y la cierra
+   *   (COMPLETED + endDate, salvo que ya esté DELIVERED).
+   *
    * @param id ID del presupuesto
    * @param status Nuevo estado
+   * @param role Rol del usuario que ejecuta el cambio (para reversiones ADMIN)
    * @returns El presupuesto actualizado
    */
   async updateStatus(
     id: string,
     status: QuoteStatus,
+    role: Role = Role.ADMIN,
   ): Promise<QuoteResponseDto> {
-    // Verificar si el presupuesto existe
-    const current = await this.prisma.quote.findUnique({ where: { id } });
-    if (!current) {
-      throw new NotFoundException(`Presupuesto con ID ${id} no encontrado`);
+    // El body no pasa por ValidationPipe: validar el valor a mano
+    if (!Object.values(QuoteStatus).includes(status)) {
+      throw new BadRequestException(
+        `Estado inválido: ${String(status)}. Valores permitidos: ${Object.values(QuoteStatus).join(', ')}`,
+      );
     }
 
-    this.assertTransition(current.status, status);
+    const existing = await this.findOne(id);
+
+    // Mismo estado: idempotente, no hace nada
+    if (existing.status === status) {
+      return existing;
+    }
+
+    this.assertTransition(existing.status, status, role);
+
+    // Reflejo fuerte en la orden (solo al pagar)
+    if (status === QuoteStatus.PAID) {
+      return this.payQuote(existing);
+    }
 
     const updatedQuote = await this.prisma.quote.update({
       where: { id },
@@ -433,17 +483,91 @@ export class QuotesService {
   }
 
   /**
+   * Valida la transición de estado contra la máquina de transiciones.
+   * @param current Estado actual
+   * @param next Estado solicitado
+   * @param role Rol del usuario (ADMIN puede revertir estados finales)
+   */
+  private assertTransition(
+    current: QuoteStatus,
+    next: QuoteStatus,
+    role: Role,
+  ): void {
+    if (current === next) return;
+    if (ALLOWED_TRANSITIONS[current]?.includes(next)) return;
+    if (role === Role.ADMIN && ADMIN_REVERSALS[current]?.includes(next)) return;
+
+    const allowed = ALLOWED_TRANSITIONS[current] ?? [];
+    throw new ConflictException(
+      `Transición de estado no permitida: ${current} → ${next}. ` +
+        `Estados permitidos desde ${current}: ${allowed.length > 0 ? allowed.join(', ') : '(ninguno, estado final)'}`,
+    );
+  }
+
+  /**
+   * Registra el pago dentro de una transacción y lo refleja en la orden.
+   * Solo llega aquí desde una transición APPROVED → PAID válida.
+   */
+  private async payQuote(quote: QuoteResponseDto): Promise<QuoteResponseDto> {
+    return this.prisma.$transaction(async (prisma) => {
+      // Regla de negocio: una orden solo admite un cobro vigente (un
+      // presupuesto pagado o facturado); el resto se revierte primero.
+      const otherCharged = await prisma.quote.count({
+        where: {
+          repairOrderId: quote.repairOrderId,
+          status: { in: [QuoteStatus.PAID, QuoteStatus.INVOICED] },
+          id: { not: quote.id },
+        },
+      });
+      if (otherCharged > 0) {
+        throw new ConflictException(
+          'La orden ya tiene un presupuesto pagado o facturado; revierta ese cobro antes de pagar otro',
+        );
+      }
+
+      const paid = await prisma.quote.update({
+        where: { id: quote.id },
+        data: { status: QuoteStatus.PAID },
+        include: { items: true },
+      });
+
+      // recalcBilling (quote-to-cash) sincroniza el total vigente de la
+      // orden con el presupuesto recién pagado...
+      await this.repairOrders.recalcBilling(quote.repairOrderId, prisma);
+
+      // ...y el pago además cierra la orden (si ya fue entregada, se respeta).
+      const order = await prisma.repairOrder.findUnique({
+        where: { id: quote.repairOrderId },
+        select: { id: true, status: true, endDate: true },
+      });
+      if (order && order.status !== RepairOrderStatus.DELIVERED) {
+        await prisma.repairOrder.update({
+          where: { id: order.id },
+          data: {
+            status: RepairOrderStatus.COMPLETED,
+            endDate: order.endDate ?? new Date(),
+          },
+        });
+      }
+
+      return new QuoteResponseDto(paid);
+    });
+  }
+
+  /**
    * Elimina un presupuesto
    * @param id ID del presupuesto
    * @returns Mensaje de confirmación
    */
   async remove(id: string): Promise<{ message: string }> {
-    // Verificar si el presupuesto existe
     const current = await this.findOne(id);
 
-    if (current.status === QuoteStatus.INVOICED) {
+    // Los documentos cobrados (PAID/INVOICED) conservan la auditoría
+    if (LOCKED_STATES.includes(current.status)) {
       throw new ConflictException(
-        'Un presupuesto INVOICED no puede eliminarse porque ya generó una venta',
+        current.status === QuoteStatus.INVOICED
+          ? 'Un presupuesto INVOICED no puede eliminarse porque ya generó una venta'
+          : `El presupuesto en estado ${current.status} no puede eliminarse; revierta el estado primero`,
       );
     }
 
