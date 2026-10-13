@@ -1,32 +1,30 @@
 # Roadmap — Trabajo pendiente
 
-> Estado al 12/10/2026. Los Sprints 1–5 están **en `main`** (PRs #10–#12,
-> ramas S1–S3 + `feat/sprint-4-hardening` + `feat/sprint-5-quote-billing`).
-> En `fix/sprint-3-hygiene` (rebaseada sobre `main`) quedó el ciclo de
-> presupuestos **unificado**: quote-to-cash de S5 + estado `PAID` (pago sin
-> documento), pendiente de merge — ver §4.
+> Estado al 12/10/2026. Los Sprints 1–5 y el ciclo unificado de
+> presupuestos están **en `main`** (PRs #10–#13; `fix/sprint-3-hygiene`
+> mergeado vía PR #13) — ver §4.
 >
 > | Rama | Contenido | Estado |
 > |---|---|---|
 > | `fix/sprint-1-security` | Guards globales, roles, registro→TECHNICIAN, Swagger condicional | ✅ en `main` |
 > | `fix/sprint-2-data-integrity` | Decimal money, catálogo de precios, totals server-side, paginación, índices | ✅ en `main` (migración aplicada en Neon) |
-> | `fix/sprint-3-hygiene` | ESLint/Prettier, `.env.example`, healthcheck, tests, CI, README, dotenv + **`PAID` unificado con quote-to-cash** | ✅ pushada, pendiente de PR |
+> | `fix/sprint-3-hygiene` | ESLint/Prettier, `.env.example`, healthcheck, tests, CI, README, dotenv + **`PAID` unificado con quote-to-cash** | ✅ en `main` (PR #13) |
 > | `feat/sprint-4-hardening` | IGV configurable, paginación scoped, Swagger dual-route, strictNullChecks, revocación opt-in | ✅ en `main` |
 > | `feat/sprint-5-quote-billing` | Convert-to-sale, máquina de estados, `recalcBilling`, e2e quote-to-cash | ✅ en `main` |
 >
-> Validación local tras unificar: build limpio · ESLint 0 · unit 105/105.
-> e2e del flujo corre en CI (service `postgres:17`); local no: el `.env`
-> apunta a Neon prod y este entorno Windows no puede spawnear backends PG.
+> Validación tras el merge: build limpio · ESLint 0 · unit 105/105 · CI
+> verde (Node 20/22 + e2e quote-to-cash con `postgres:17`). El e2e local no
+> corre: el `.env` apunta a Neon prod y este entorno Windows no puede
+> spawnear backends PG.
 
 ## 1. Inmediato (cierre del trabajo ya hecho)
 
-- [ ] **Mergear `fix/sprint-3-hygiene`** — único trabajo fuera de `main`
-  (ciclo `PAID` unificado; ver §4).
+- [x] ~~Mergear `fix/sprint-3-hygiene`~~ — mergeado a `main` (PR #13).
+- [x] ~~Verificar CI tras el merge~~ — verde en `main` (Node 20/22 + e2e
+  quote-to-cash con `postgres:17`).
 - [ ] **Desplegar a Vercel** — producción corre sin S4/S5 ni `PAID`. Las
   migraciones (`0`…`3_quote_billing` + `2_add_quote_paid_status`) ya están
   aplicadas en Neon; falta publicar código.
-- [ ] **Verificar CI tras el merge** — e2e quote-to-cash con `postgres:17`:
-  revisar la pestaña Actions tras el push.
 
 ## 2. Sprint 4 (implementado en `feat/sprint-4-hardening`)
 
@@ -82,6 +80,11 @@
   en Neon**; enum final `PENDING, APPROVED, PAID, REJECTED, EXPIRED,
   INVOICED`.
 - Validación local: build · ESLint 0 · unit 105/105. e2e en CI.
+- ✅ **Merged a `main`** (PR #13, 12/10/2026); migración aplicada en Neon.
+- Frontend (`electro-pime`, commit `48c5483` en `main`): S1–S4 del ciclo
+  quote-to-cash implementados — estados, acciones gateadas por ADMIN,
+  bloqueo S4 en la orden y recibo A4 mejorado (iframe, charset, fuentes,
+  estado/presupuestos/cobros).
 
 ## 5. Tras mergear S4–S5 (dueño del proyecto)
 
