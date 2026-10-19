@@ -28,18 +28,27 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const SYSTEM_INSTRUCTION = `Eres un motor OCR especializado en etiquetas de aparatos electrónicos (TV, laptop, celular, tablet, monitor, consola, refrigerador, lavadora, microondas).
 
+Antes de responder, lee la imagen con atención al detalle y transcribe mentalmente el texto visible de la etiqueta.
+
 Extrae en español:
 - deviceType: TV | LAPTOP | CELULAR | TABLET | MONITOR | CONSOLA | ELECTRODOMESTICO | OTRO
-- brand: marca/fabricante (ej: Samsung, LG, HP, Xiaomi)
-- model: designación del modelo (ej: 55TU7000, 14-DK1025LA)
-- serialNumber: número de serie / S/N / IMEI si aparece
+- brand: marca/fabricante (ej: Samsung, LG, HP, Xiaomi, Lenovo, Sony, Whirlpool)
+- model: designación del modelo tal como está impresa (ej: 55TU7000, 14-DK1025LA, WM3400CW)
+- serialNumber: número de serie / S/N / SN / Serial No. / IMEI tal como está impreso
 
-Las etiquetas pueden estar en inglés o español. Ejemplos:
-- "MODEL: 55TU7000" → model: 55TU7000
-- "S/N: R38M..." → serialNumber: R38M...
+Las etiquetas pueden estar en inglés o español. Patrones comunes:
+- "MODEL: 55TU7000" o "MODEL NO. ..." → model: 55TU7000
+- "MODEL CODE: LP156WH4" → model: LP156WH4
+- "S/N: R38M90XK1" o "SERIAL NO. ..." → serialNumber: R38M90XK1
+- "SN: ..." → serialNumber
+- "IMEI: 356938035643809" → serialNumber: 356938035643809
 - "MADE IN MEXICO / LG Electronics" → brand: LG
+- "Samsung Electronics" en la etiqueta → brand: Samsung
+- "TYPE: TV" o "Product: Laptop" → deviceType
 
-Si un campo no se puede determinar, usa null.
+Ignora el ruido de la etiqueta: logos regulatorios (UL, CE, FCC, NOM), códigos de barras, QR, tablas de voltaje/frecuencia, textos de seguridad y "MADE IN...". P/N y part numbers no son el número de serie.
+
+Si un campo no se puede determinar, usa null. No inventes valores: transcribe exactamente lo impreso (espacios, guiones y mayúsculas tal como aparecen).
 Responde ÚNICAMENTE con un JSON válido, sin markdown ni texto adicional.`;
 
 const RESPONSE_SCHEMA = {
@@ -85,6 +94,14 @@ export class LabelsService {
         ? dto.ocrText.slice(0, MAX_OCR_TEXT_CHARS)
         : '';
 
+    // El hint local ancla al modelo: si va, siempre con advertencia de que la
+    // imagen manda (el OCR local es ruidoso y arrastró errores en pruebas).
+    const hintLine =
+      ocrHint !== ''
+        ? `Texto OCR previo (puede contener errores, verifícalo contra la imagen): ${ocrHint}\n`
+        : '';
+    const userText = `${hintLine}Extrae los datos de esta etiqueta de aparato electrónico.`;
+
     let res: Response | null = null;
     let ultimoStatus = 0;
 
@@ -99,12 +116,7 @@ export class LabelsService {
               role: 'user',
               parts: [
                 { inlineData: { mimeType, data: imageBase64 } },
-                {
-                  text:
-                    ocrHint !== ''
-                      ? `Texto OCR previo: ${ocrHint}\nExtrae los datos de esta etiqueta de aparato electrónico.`
-                      : 'Extrae los datos de esta etiqueta de aparato electrónico.',
-                },
+                { text: userText },
               ],
             },
           ],

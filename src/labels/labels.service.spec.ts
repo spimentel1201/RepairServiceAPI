@@ -180,18 +180,19 @@ describe('LabelsService', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('ocrText se trunca a 4000 chars en el hint', async () => {
+  it('ocrText se trunca a 4000 chars en el hint y advierte que el OCR local es ruidoso', async () => {
     fetchMock.mockResolvedValue(okResponse(geminiPayload('S1')));
     await service.extract(baseDto({ ocrText: 'x'.repeat(5000) }));
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     const hint: string = body.contents[0].parts[1].text;
-    expect(hint).toContain('Texto OCR previo:');
-    expect(hint.length).toBeLessThanOrEqual(
-      'Texto OCR previo: '.length + 4000 + 60,
-    );
+    expect(hint).toContain('Texto OCR previo');
+    expect(hint).toContain('puede contener errores');
+    expect(hint).toContain('verifícalo contra la imagen');
+    expect(hint).toContain('x'.repeat(100));
+    expect(hint.length).toBeLessThanOrEqual(5000);
   });
 
-  it('sin ocrText usa el prompt base', async () => {
+  it('sin ocrText no incluye el hint, solo el prompt base', async () => {
     fetchMock.mockResolvedValue(okResponse(geminiPayload('S1')));
     await service.extract(baseDto());
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
