@@ -169,6 +169,60 @@ export class RepairOrdersService {
   }
 
   /**
+   * Obtiene la última orden de reparación asociada a un número de serie
+   * (la más reciente por createdAt). Así, si hay varias órdenes para el mismo
+   * artefacto, se devuelve la última registrada.
+   * @param serial Número de serie del artefacto (tal como aparece en la etiqueta)
+   * @returns La orden encontrada
+   */
+  async findBySerial(serial: string): Promise<RepairOrderResponseDto> {
+    const normalized = (serial || '').trim();
+    if (!normalized) {
+      throw new NotFoundException('Número de serie no proporcionado');
+    }
+
+    const repairOrder = await this.prisma.repairOrder.findFirst({
+      where: {
+        items: {
+          some: {
+            serialNumber: {
+              equals: normalized,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        technician: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (!repairOrder) {
+      throw new NotFoundException(
+        `No se encontró orden de reparación para el serial ${normalized}`,
+      );
+    }
+
+    return new RepairOrderResponseDto(repairOrder);
+  }
+
+  /**
    * Obtiene una orden de reparación por su ID
    * @param id ID de la orden
    * @returns La orden encontrada

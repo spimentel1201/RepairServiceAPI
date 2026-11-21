@@ -34,7 +34,7 @@ Extrae en español:
 - deviceType: TV | LAPTOP | CELULAR | TABLET | MONITOR | CONSOLA | ELECTRODOMESTICO | OTRO
 - brand: marca/fabricante (ej: Samsung, LG, HP, Xiaomi, Lenovo, Sony, Whirlpool)
 - model: designación del modelo tal como está impresa (ej: 55TU7000, 14-DK1025LA, WM3400CW)
-- serialNumber: número de serie / S/N / SN / Serial No. / IMEI tal como está impreso
+- serialNumber: número de serie / S/N / SN / Serial No. / Serie / IMEI tal como está impreso (transcribe la cadena alfanumérica completa, conservando guiones, espacios y mayúsculas; NO confundir con modelo ni part number)
 
 Las etiquetas pueden estar en inglés o español. Patrones comunes:
 - "MODEL: 55TU7000" o "MODEL NO. ..." → model: 55TU7000
@@ -42,6 +42,9 @@ Las etiquetas pueden estar en inglés o español. Patrones comunes:
 - "S/N: R38M90XK1" o "SERIAL NO. ..." → serialNumber: R38M90XK1
 - "SN: ..." → serialNumber
 - "IMEI: 356938035643809" → serialNumber: 356938035643809
+- "SERIAL NUMBER: ABC-12345" → serialNumber: ABC-12345
+- "SERIE: 0012345678" → serialNumber: 0012345678
+- "S/N 9X4K-7721" → serialNumber: 9X4K-7721
 - "MADE IN MEXICO / LG Electronics" → brand: LG
 - "Samsung Electronics" en la etiqueta → brand: Samsung
 - "TYPE: TV" o "Product: Laptop" → deviceType

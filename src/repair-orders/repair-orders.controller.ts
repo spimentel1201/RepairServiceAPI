@@ -99,6 +99,22 @@ export class RepairOrdersController {
     return data;
   }
 
+  @Get('by-serial/:serial')
+  @Roles(Role.ADMIN, Role.TECHNICIAN)
+  @ApiOperation({
+    summary: 'Obtener la última orden de reparación asociada a un número de serie',
+  })
+  @ApiParam({ name: 'serial', description: 'Número de serie del artefacto' })
+  @ApiResponse({
+    status: 200,
+    description: 'Retorna la orden de reparación más reciente para ese serial',
+    type: RepairOrderResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'No se encontró orden para ese serial.' })
+  findBySerial(@Param('serial') serial: string): Promise<RepairOrderResponseDto> {
+    return this.repairOrdersService.findBySerial(serial);
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN, Role.TECHNICIAN)
   @ApiOperation({ summary: 'Obtener una orden de reparación por ID' })
