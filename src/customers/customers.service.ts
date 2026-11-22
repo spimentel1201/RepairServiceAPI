@@ -32,6 +32,22 @@ export class CustomersService {
   async create(
     createCustomerDto: CreateCustomerDto,
   ): Promise<CustomerResponseDto> {
+    // Validación de duplicados (nombre completo y documento) antes de insertar.
+    const existingByName = await this.prisma.customer.findFirst({
+      where: { name: { equals: createCustomerDto.name, mode: 'insensitive' } },
+    });
+    if (existingByName) {
+      throw new ConflictException('Ya existe un cliente con ese nombre completo');
+    }
+    if (createCustomerDto.documentNumber) {
+      const existingByDoc = await this.prisma.customer.findFirst({
+        where: { documentNumber: createCustomerDto.documentNumber },
+      });
+      if (existingByDoc) {
+        throw new ConflictException('El número de documento ya está registrado');
+      }
+    }
+
     try {
       const customer = await this.prisma.customer.create({
         data: createCustomerDto,
@@ -55,8 +71,7 @@ export class CustomersService {
           }
         }
       }
-      // Re-lanza el error original: los errores de Prisma los mapea el filtro
-      // global (P2002 -> 409, P2025/P2003 -> 404/409) y los demas -> 500 real
+      // Re-lanza el error original
       throw error;
     }
   }
