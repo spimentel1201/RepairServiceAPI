@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { RepairOrderStatus } from '@prisma/client';
+import { RepairOrderStatus, PaymentMethod } from '@prisma/client';
 import { toAmount } from '../../common/utils/price.utils';
 
 export class RepairOrderItemResponseDto {
@@ -101,6 +101,18 @@ export class RepairOrderResponseDto {  @ApiProperty({ description: 'ID de la ord
 
   @ApiProperty({ description: 'Costo total de la reparación' })
   totalCost: number;
+
+  @ApiPropertyOptional({ description: 'Indica si la revision fue pagada', default: false })
+  reviewPaid?: boolean;
+
+  @ApiPropertyOptional({ description: 'Metodo de pago de la revision', enum: PaymentMethod })
+  reviewPaymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({ description: 'Codigo de operacion (Yape/Plin)' })
+  reviewPaymentCode?: string;
+
+  @ApiPropertyOptional({ description: 'Fecha en que se pago la revision' })
+  reviewPaidAt?: Date;
 
   @ApiProperty({ description: 'Fecha de creación' })
   createdAt: Date;

@@ -88,6 +88,10 @@ model RepairOrder {
   notes       String?
   initialReviewCost Decimal      @default(0) @db.Decimal(10, 2)
   totalCost   Decimal            @default(0) @db.Decimal(10, 2)
+  reviewPaid  Boolean            @default(false)
+  reviewPaymentMethod PaymentMethod?
+  reviewPaymentCode   String?
+  reviewPaidAt        DateTime?
   startDate   DateTime           @default(now())
   endDate     DateTime?
   createdAt   DateTime           @default(now())

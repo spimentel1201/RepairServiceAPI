@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -12,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { RepairOrderStatus } from '@prisma/client';
+import { RepairOrderStatus, PaymentMethod } from '@prisma/client';
 
 export class CreateRepairOrderItemDto {
   @ApiProperty({ description: 'Tipo de dispositivo(TV, Laptop, etc.)' })
@@ -117,6 +118,35 @@ export class CreateRepairOrderDto {
   @Min(0)
   @IsOptional()
   initialReviewCost?: number;
+
+  @ApiPropertyOptional({
+    description: 'Indica si la revisión ya fue pagada',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  reviewPaid?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Método de pago de la revisión',
+    enum: PaymentMethod,
+  })
+  @IsEnum(PaymentMethod)
+  @IsOptional()
+  reviewPaymentMethod?: PaymentMethod;
+
+  @ApiPropertyOptional({
+    description: 'Código de operación (Yape/Plin), opcional',
+  })
+  @IsString()
+  @IsOptional()
+  reviewPaymentCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Fecha en que se pagó la revisión (ISO). Si se omite y reviewPaid=true, se usa now()',
+  })
+  @IsOptional()
+  reviewPaidAt?: string;
 
   @ApiProperty({
     description: 'Ítems de la orden de reparación',

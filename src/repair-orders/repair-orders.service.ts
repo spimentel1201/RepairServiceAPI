@@ -109,6 +109,15 @@ export class RepairOrdersService {
           notes: createRepairOrderDto.notes,
           initialReviewCost,
           totalCost: roundToTwoDecimals(initialReviewCost + itemsTotal),
+          reviewPaid: createRepairOrderDto.reviewPaid ?? false,
+          reviewPaymentMethod: createRepairOrderDto.reviewPaymentMethod ?? null,
+          reviewPaymentCode: createRepairOrderDto.reviewPaymentCode ?? null,
+          reviewPaidAt:
+            createRepairOrderDto.reviewPaid
+              ? createRepairOrderDto.reviewPaidAt
+                ? new Date(createRepairOrderDto.reviewPaidAt)
+                : new Date()
+              : null,
           items: {
             create: items,
           },
@@ -501,6 +510,17 @@ export class RepairOrdersService {
             description: updateRepairOrderDto.description,
             notes: updateRepairOrderDto.notes,
             initialReviewCost,
+            reviewPaid: updateRepairOrderDto.reviewPaid,
+            reviewPaymentMethod: updateRepairOrderDto.reviewPaymentMethod,
+            reviewPaymentCode: updateRepairOrderDto.reviewPaymentCode,
+            reviewPaidAt:
+              updateRepairOrderDto.reviewPaid === true
+                ? updateRepairOrderDto.reviewPaidAt
+                  ? new Date(updateRepairOrderDto.reviewPaidAt)
+                  : new Date()
+                : updateRepairOrderDto.reviewPaid === false
+                  ? null
+                  : undefined,
             totalCost: hasPaidQuote
               ? current.totalCost
               : roundToTwoDecimals(initialReviewCost + itemsTotal),
@@ -536,6 +556,17 @@ export class RepairOrdersService {
           description: updateRepairOrderDto.description,
           notes: updateRepairOrderDto.notes,
           initialReviewCost,
+          reviewPaid: updateRepairOrderDto.reviewPaid,
+          reviewPaymentMethod: updateRepairOrderDto.reviewPaymentMethod,
+          reviewPaymentCode: updateRepairOrderDto.reviewPaymentCode,
+          reviewPaidAt:
+            updateRepairOrderDto.reviewPaid === true
+              ? updateRepairOrderDto.reviewPaidAt
+                ? new Date(updateRepairOrderDto.reviewPaidAt)
+                : new Date()
+              : updateRepairOrderDto.reviewPaid === false
+                ? null
+                : undefined,
           totalCost: hasPaidQuote
             ? current.totalCost
             : roundToTwoDecimals(initialReviewCost + itemsTotal),
