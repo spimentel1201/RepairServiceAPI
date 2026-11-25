@@ -388,7 +388,12 @@ export class RepairOrdersService {
   ): Promise<void> {
     const order = await db.repairOrder.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        initialReviewCost: true,
+        items: { select: { price: true, quantity: true } },
+      },
     });
 
     if (!order) {
@@ -407,10 +412,22 @@ export class RepairOrdersService {
       select: { totalAmount: true },
     });
 
+    // El total de la orden incluye la revisión inicial + el cargo por equipo
+    // (items) + los presupuestos vigentes. Antes se reemplazaba por solo la
+    // suma de presupuestos, perdiendo la revisión (inconsistencia con el
+    // recibo, donde "Total General" < "Cobrado").
+    const reviewCost = toAmount(order.initialReviewCost);
+    const itemsTotal = (order.items ?? []).reduce(
+      (sum, it) => sum + toAmount(it.price) * (it.quantity || 1),
+      0,
+    );
+    const quotesTotal = billable.reduce(
+      (sum, q) => sum + toAmount(q.totalAmount),
+      0,
+    );
+
     const data: Prisma.RepairOrderUpdateInput = {
-      totalCost: roundToTwoDecimals(
-        billable.reduce((sum, q) => sum + toAmount(q.totalAmount), 0),
-      ),
+      totalCost: roundToTwoDecimals(reviewCost + itemsTotal + quotesTotal),
     };
 
     if (
@@ -581,6 +598,14 @@ export class RepairOrdersService {
         },
       });
     });
+
+    // Recomputa el total vigente (revision + items + presupuestos), salvo que
+    // un presupuesto pagado haya fijado el total (no se pisa).
+    if (!hasPaidQuote) {
+      await this.recalcBilling(id);
+      const refreshed = await this.findOne(id);
+      return refreshed;
+    }
 
     return new RepairOrderResponseDto(updatedOrder);
   }

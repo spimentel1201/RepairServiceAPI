@@ -116,8 +116,17 @@ export class SalesController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ): Promise<SaleResponseDto[]> {
-    const startDateTime = startDate ? new Date(startDate) : undefined;
-    const endDateTime = endDate ? new Date(endDate) : undefined;
+    // Acepta tanto instantes ISO completos como fechas sueltas (YYYY-MM-DD).
+    // Para fechas sueltas, `endDate` se extiende al final del día: antes se
+    // interpretaba como medianoche y dejaba fuera las ventas de ese mismo día.
+    const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+    const parseStart = (value: string) =>
+      DATE_ONLY.test(value) ? new Date(`${value}T00:00:00.000Z`) : new Date(value);
+    const parseEnd = (value: string) =>
+      DATE_ONLY.test(value) ? new Date(`${value}T23:59:59.999Z`) : new Date(value);
+
+    const startDateTime = startDate ? parseStart(startDate) : undefined;
+    const endDateTime = endDate ? parseEnd(endDate) : undefined;
     const { skip, take } = parsePagination(page, limit);
 
     const { data, total } = await this.salesService.findAll({

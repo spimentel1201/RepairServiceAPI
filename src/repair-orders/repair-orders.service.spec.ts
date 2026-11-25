@@ -18,7 +18,10 @@ describe('RepairOrdersService (totales y normalizacion de items)', () => {
     prisma = {
       customer: { findUnique: jest.fn().mockResolvedValue({ id: 'c-1' }) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
-      quote: { findFirst: jest.fn().mockResolvedValue(null) },
+      quote: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       repairOrder: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'ro-1',
@@ -29,6 +32,7 @@ describe('RepairOrdersService (totales y normalizacion de items)', () => {
           quotes: [],
           sales: [],
         }),
+        update: jest.fn().mockResolvedValue({ id: 'ro-1', items: [] }),
       },
       $transaction: jest.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
     };
